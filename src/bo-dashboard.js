@@ -15,7 +15,9 @@
   const PANEL_ID = "bo-checklist-dashboard";
   const TIMER_FLAG = "__boChecklistTimer";
   const CLOSED_FLAG = "__boChecklistClosed";
+  const WINNER_TIMER_FLAG = "__boChecklistWinnerTimer";
   const REFRESH_MS = 5 * 60 * 1000;
+  const WINNER_REFRESH_MS = 10 * 60 * 1000;
   const LATE_TAB_WAIT_MS = 1200;
   const LATE_TAB_MAX_ATTEMPTS = 4;
   const QUICK_REPORT_LATE_CLIENTS = new Set(["Mac88", "Royal Gaming"]);
@@ -51,7 +53,16 @@
   const VERSION = "v1";
 
   let currentPayload = null;
-  let isScanning = false;
+  let isScanningStatus = false;
+  let isScanningWinner = false;
+  let overviewResults = [];
+  let overviewSnapshotAt = null;
+  let winnerClients = {};
+  let winnerReportQueue = [];
+  let winnerCompletedQueue = [];
+  let winnerMailingRows = [];
+  let winnerSnapshotAt = null;
+  let ticketingData = null;
   let userConsented = false;
   let ignoreNightOnly = localStorage.getItem(NIGHT_FILTER_STORAGE_KEY) === "1";
   let fullscreen = localStorage.getItem(MODE_STORAGE_KEY) === "full";
@@ -988,7 +999,7 @@
         render(currentPayload);
       }),
     );
-    tools.appendChild(mkBtn(isScanning ? "Scanning..." : "Scan", () => runScan(true), isScanning));
+    tools.appendChild(mkBtn(isScanningStatus || isScanningWinner ? "Scanning..." : "Scan", () => { runOverviewScan(); }, isScanningStatus || isScanningWinner));
     tools.appendChild(
       mkBtn(fullscreen ? "Exit full screen" : "Full screen", () => {
         fullscreen = !fullscreen;
@@ -1017,6 +1028,8 @@
         window.clearInterval(heartbeat);
         window.clearTimeout(window[TIMER_FLAG]);
         window[TIMER_FLAG] = null;
+        window.clearTimeout(window[WINNER_TIMER_FLAG]);
+        window[WINNER_TIMER_FLAG] = null;
         root.remove();
       }),
     );
@@ -1027,7 +1040,7 @@
       mk(
         "div",
         `padding:10px 14px;color:${t.inkSoft};border-bottom:1px solid ${t.lineSoft};`,
-        `${escapeHtml(extra.progressLine || statusLine)} · Updated ${escapeHtml(formatStamp(data?.snapshotDate))}`,
+        `${escapeHtml(extra.progressLine || statusLine)} · Statuses ${escapeHtml(formatStamp(data?.snapshotDate))}${data?.winnerReportsSnapshotDate ? ` · Winner ${escapeHtml(formatStamp(data.winnerReportsSnapshotDate))}` : ""}`,
       ),
     );
 
@@ -1254,140 +1267,232 @@
     }
   }
 
-  async function runScan(force = false) {
-    if (isScanning) {
+  let boQueue = Promise.resolve();
+  let warningsBatch = [];
+
+  function withBoLock(work) {
+    const run = boQueue.catch(() => {}).then(work);
+    boQueue = run.catch(() => {});
+    return run;
+  }
+
+  function mergePayload() {
+    const clients = overviewResults.map((client) => ({
+      ...client,
+      ...(winnerClients[client.clientId] || {}),
+    }));
+    const sorted = [...clients].sort((a, b) => b.total - a.total || a.client.localeCompare(b.client));
+    currentPayload = {
+      snapshotDate: overviewSnapshotAt,
+      winnerReportsSnapshotDate: winnerSnapshotAt,
+      ticketing: ticketingData,
+      clients: sorted,
+      reportQueue: winnerReportQueue,
+      completedQueue: winnerCompletedQueue,
+      mailing: winnerMailingRows,
+      warnings: [...new Set(warningsBatch)],
+    };
+    return currentPayload;
+  }
+
+  function ensureConsent() {
+    userConsented = window.confirm(
+      "BO Checklist: scans switch the active BO client in THIS browser session.\n\n" +
+        "Recommended: run this in a separate browser or an incognito window with its own BO login, " +
+        "not in the browser you work in.\n\nStart the scans here?",
+    );
+    if (!userConsented) {
+      statusLine = "Scan cancelled. Open lfscbo.com in a separate browser session and press Scan there.";
+      render(mergePayload());
+    }
+    return userConsented;
+  }
+
+  async function runOverviewScan() {
+    if (isScanningStatus) {
       return;
     }
 
-    if (!userConsented) {
-      userConsented = window.confirm(
-        "BO Checklist: a scan switches the active BO client in THIS browser session.\n\n" +
-          "Recommended: run this in a separate browser or an incognito window with its own BO login, " +
-          "not in the browser you work in.\n\nStart the scan here?",
-      );
-      if (!userConsented) {
-        statusLine = "Scan cancelled. Open lfscbo.com in a separate browser session and press Scan there.";
-        if (!currentPayload) {
-          currentPayload = { snapshotDate: null, ticketing: null, clients: [], warnings: [] };
-        }
-        render(currentPayload);
-        return;
-      }
+    if (!userConsented && !ensureConsent()) {
+      return;
     }
 
-    isScanning = true;
-    statusLine = "Scanning...";
-    render(currentPayload);
+    return withBoLock(async () => {
+      isScanningStatus = true;
+      statusLine = "Statuses: scanning...";
+      render(mergePayload());
 
-    try {
-      const isoDate = getIsoDate();
-      const baseHtml = await fetchToCheckHtml(isoDate);
+      try {
+        const isoDate = getIsoDate();
+        const baseHtml = await fetchToCheckHtml(isoDate);
 
-      if (isLoginPage(baseHtml)) {
-        throw new Error("BO session expired. Log in to lfscbo.com again.");
-      }
-
-      const clients = parseClientsFromHtml(baseHtml);
-      if (!clients.length) {
-        throw new Error("Could not parse client list from BO");
-      }
-
-      originalClientId = clients.find((client) => client.selected)?.id || null;
-      const ticketingRequests = await fetch("/ajax.php?q=lfs/ticketing", { credentials: "same-origin" })
-        .then((response) => response.text())
-        .then(parseTicketingRequests)
-        .catch(() => null);
-
-      const displayDate = getDisplayDateFromIso(isoDate);
-      const results = [];
-      const reportQueue = [];
-      const completedQueue = [];
-      const mailingRows = [];
-
-      for (let index = 0; index < clients.length; index += 1) {
-        const clientRef = clients[index];
-        statusLine = `Scanning ${index + 1} / ${clients.length}`;
-        render(currentPayload, { progressLine: `${statusLine} — ${clientRef.client}` });
-
-        await boFetch(`/ajax.php?q=core/userTeamSelect&type=lfs&val=${encodeURIComponent(clientRef.id)}`);
-        const toCheckHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
-        const overview = collectClient(clientRef, toCheckHtml);
-
-        let winnerCounts = {
-          quickReports: null,
-          quickReportsCompleted: null,
-          quickReportsTotal: null,
-          quickReportsConfidence: "error",
-          winnerReports: null,
-          winnerReportsCompleted: null,
-          winnerReportsTotal: null,
-          winnerReportsConfidence: "error",
-        };
-
-        try {
-          const winnerOverview = await collectWinnerForClient(clientRef, isoDate, displayDate);
-          winnerCounts = winnerOverview.winnerCounts;
-          reportQueue.push(...winnerOverview.reportQueueItems);
-          completedQueue.push(...winnerOverview.completedQueueItems);
-        } catch (error) {
-          currentPayload = currentPayload
-            ? { ...currentPayload, warnings: [...new Set([...(currentPayload.warnings || []), `${clientRef.client}: ${error.message}`])] }
-            : { snapshotDate: null, ticketing: null, clients: [], warnings: [`${clientRef.client}: ${error.message}`] };
+        if (isLoginPage(baseHtml)) {
+          throw new Error("BO session expired. Log in to lfscbo.com again.");
         }
 
-        let mailing = [];
-        try {
-          const mailerHtml = await boFetch("/ajax.php?q=lfs/ticketing/mailer");
-          mailing = parseMailerTabsFromHtml(mailerHtml).filter((tab) => tab.count > 0);
-        } catch {
-          mailing = [];
-        }
-        if (mailing.length) {
-          mailingRows.push({ client: clientRef.client, clientId: clientRef.id, tabs: mailing });
+        const clients = parseClientsFromHtml(baseHtml);
+        if (!clients.length) {
+          throw new Error("Could not parse client list from BO");
         }
 
-        results.push({ ...overview, ...winnerCounts });
-        render(
-          currentPayload,
-          {
-            progressLine: `${statusLine} — ${clientRef.client} (winner ${winnerCounts.winnerReports ?? "?"}, quick ${winnerCounts.quickReports ?? "?"})`,
-          },
-        );
-        await sleep(SCAN_STEP_DELAY_MS);
+        originalClientId = clients.find((client) => client.selected)?.id || null;
+        ticketingData = await Promise.resolve()
+          .then(() => fetch("/ajax.php?q=lfs/ticketing", { credentials: "same-origin" }).then((response) => response.text()))
+          .then(parseTicketingRequests)
+          .catch(() => null)
+          .then((requests) => ({ requests }));
+
+        const results = [];
+        for (let index = 0; index < clients.length; index += 1) {
+          const clientRef = clients[index];
+          statusLine = `Statuses ${index + 1} / ${clients.length}`;
+          render(mergePayload(), { progressLine: `${statusLine} — ${clientRef.client}` });
+
+          await boFetch(`/ajax.php?q=core/userTeamSelect&type=lfs&val=${encodeURIComponent(clientRef.id)}`);
+          const toCheckHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
+          results.push(collectClient(clientRef, toCheckHtml));
+          await sleep(SCAN_STEP_DELAY_MS);
+        }
+
+        restoreOriginalClient();
+
+        overviewResults = results;
+        overviewSnapshotAt = new Date().toISOString();
+        warningsBatch = warningsBatch.filter((line) => !line.startsWith("Statuses:"));
+        statusLine = "Statuses done.";
+        render(mergePayload());
+      } catch (error) {
+        warningsBatch = [...warningsBatch, `Statuses: ${error.message}`];
+        statusLine = `Error: ${error.message}`;
+        restoreOriginalClient();
+        render(mergePayload());
+      } finally {
+        isScanningStatus = false;
+        render(mergePayload());
+
+        window.clearTimeout(window[TIMER_FLAG]);
+        window[TIMER_FLAG] = window.setTimeout(runOverviewScan, REFRESH_MS);
       }
+    });
+  }
 
-      restoreOriginalClient();
+  function emptyWinnerCounts() {
+    return {
+      quickReports: null,
+      quickReportsCompleted: null,
+      quickReportsTotal: null,
+      quickReportsConfidence: "error",
+      winnerReports: null,
+      winnerReportsCompleted: null,
+      winnerReportsTotal: null,
+      winnerReportsConfidence: "error",
+    };
+  }
 
-      const sorted = [...results].sort((a, b) => b.total - a.total || a.client.localeCompare(b.client));
-      currentPayload = {
-        snapshotDate: new Date().toISOString(),
-        requestedDate: isoDate,
-        ticketing: { requests: ticketingRequests },
-        clients: sorted,
-        reportQueue: reportQueue.sort((a, b) => (b.lastBetHours ?? -1) - (a.lastBetHours ?? -1)),
-        completedQueue,
-        mailing: mailingRows,
-        warnings: [],
-      };
-      statusLine = "Done.";
-      render(currentPayload);
-    } catch (error) {
-      statusLine = `Error: ${error.message}`;
-      currentPayload = currentPayload
-        ? { ...currentPayload, warnings: [statusLine] }
-        : { snapshotDate: null, ticketing: null, clients: [], warnings: [statusLine] };
-      restoreOriginalClient();
-      render(currentPayload);
-    } finally {
-      isScanning = false;
-      render(currentPayload);
-
-      window.clearTimeout(window[TIMER_FLAG]);
-      window[TIMER_FLAG] = window.setTimeout(runScan, REFRESH_MS);
+  async function runWinnerScan() {
+    if (isScanningWinner) {
+      return;
     }
+
+    if (!userConsented && !ensureConsent()) {
+      return;
+    }
+
+    return withBoLock(async () => {
+      isScanningWinner = true;
+      statusLine = "Winner reports: scanning...";
+      render(mergePayload());
+
+      const nextWinnerClients = {};
+      const nextReportQueue = [];
+      const nextCompletedQueue = [];
+      const nextMailingRows = [];
+
+      try {
+        const isoDate = getIsoDate();
+        const displayDate = getDisplayDateFromIso(isoDate);
+
+        let clientRefs = overviewResults.map((client) => ({ id: client.clientId, client: client.client }));
+        if (!clientRefs.length) {
+          const baseHtml = await fetchToCheckHtml(isoDate);
+          if (isLoginPage(baseHtml)) {
+            throw new Error("BO session expired. Log in to lfscbo.com again.");
+          }
+          clientRefs = parseClientsFromHtml(baseHtml);
+        }
+
+        for (let index = 0; index < clientRefs.length; index += 1) {
+          const clientRef = clientRefs[index];
+          statusLine = `Winner reports ${index + 1} / ${clientRefs.length}`;
+          render(mergePayload(), { progressLine: `${statusLine} — ${clientRef.client}` });
+
+          await boFetch(`/ajax.php?q=core/userTeamSelect&type=lfs&val=${encodeURIComponent(clientRef.id)}`);
+
+          let winnerCounts = emptyWinnerCounts();
+          let queueItems = [];
+          let completedItems = [];
+
+          try {
+            const winnerOverview = await collectWinnerForClient(clientRef, isoDate, displayDate);
+            winnerCounts = winnerOverview.winnerCounts;
+            queueItems = winnerOverview.reportQueueItems;
+            completedItems = winnerOverview.completedQueueItems;
+          } catch (error) {
+            warningsBatch = [...new Set([...warningsBatch, `${clientRef.client}: ${error.message}`])];
+          }
+
+          let mailing = [];
+          try {
+            const mailerHtml = await boFetch("/ajax.php?q=lfs/ticketing/mailer");
+            mailing = parseMailerTabsFromHtml(mailerHtml).filter((tab) => tab.count > 0);
+          } catch {
+            mailing = [];
+          }
+          if (mailing.length) {
+            nextMailingRows.push({ client: clientRef.client, clientId: clientRef.id, tabs: mailing });
+          }
+
+          nextWinnerClients[clientRef.id] = { ...winnerCounts };
+          nextReportQueue.push(...queueItems);
+          nextCompletedQueue.push(...completedItems);
+
+          statusLine = `Winner reports ${index + 1} / ${clientRefs.length}`;
+          render(
+            mergePayload(),
+            {
+              progressLine: `${statusLine} — ${clientRef.client} (winner ${winnerCounts.winnerReports ?? "?"}, quick ${winnerCounts.quickReports ?? "?"})`,
+            },
+          );
+          await sleep(SCAN_STEP_DELAY_MS);
+        }
+
+        restoreOriginalClient();
+
+        winnerClients = nextWinnerClients;
+        winnerReportQueue = nextReportQueue.sort((a, b) => (b.lastBetHours ?? -1) - (a.lastBetHours ?? -1));
+        winnerCompletedQueue = nextCompletedQueue;
+        winnerMailingRows = nextMailingRows;
+        winnerSnapshotAt = new Date().toISOString();
+        warningsBatch = warningsBatch.filter((line) => !line.startsWith("Winner:"));
+        statusLine = "Winner reports done.";
+        render(mergePayload());
+      } catch (error) {
+        warningsBatch = [...warningsBatch, `Winner: ${error.message}`];
+        statusLine = `Error: ${error.message}`;
+        restoreOriginalClient();
+        render(mergePayload());
+      } finally {
+        isScanningWinner = false;
+        render(mergePayload());
+
+        window.clearTimeout(window[WINNER_TIMER_FLAG]);
+        window[WINNER_TIMER_FLAG] = window.setTimeout(runWinnerScan, WINNER_REFRESH_MS);
+      }
+    });
   }
 
   root.dataset.minimized = "0";
-  render(null);
-  runScan("manual");
+  render(mergePayload());
+  runOverviewScan();
+  runWinnerScan();
 })();
