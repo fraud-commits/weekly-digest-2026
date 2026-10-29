@@ -1173,17 +1173,19 @@
         }
 
         items.slice(0, fullscreen ? 40 : 12).forEach((item) => {
+          const [clientFill, clientInk] = clientColor(item.client);
+          const [ageFill, ageInk] = isQuickReport(item) || isCompleted ? ["transparent", t.inkSoft] : ageColor(item.lastBetHours);
           const line = mk(
             "div",
-            `display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:4px;background:${t.surfaceRaised};border:1px solid ${t.chipLine};font-size:12px;`,
+            `display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:4px;background:${ageFill === "transparent" ? t.surfaceRaised : ageFill};border:1px solid ${t.chipLine};font-size:12px;`,
           );
           line.appendChild(
             mk(
               "div",
               "display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;",
-              `<span style="background:${t.chipFill};border:1px solid ${t.chipLine};display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;">${escapeHtml(item.client)}</span>` +
+              `<span style="background:${clientFill};color:${clientInk};border:1px solid ${clientInk}55;display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;">${escapeHtml(item.client)}</span>` +
                 `<span style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.playerId)}</span>` +
-                (item.overdue && !isCompleted ? `<span style="color:${t.warnInk};font-size:10px;font-weight:700;">overdue</span>` : ""),
+                (!isCompleted && typeof item.lastBetHours === "number" ? `<span style="color:${ageInk};font-size:10px;font-weight:700;">${item.lastBetHours > 3 ? "overdue" : "under 3h"}</span>` : ""),
             ),
           );
           line.appendChild(
@@ -1258,6 +1260,39 @@
 
   function trimDetail(lastBetText, netWinningsText, aggregatedText) {
     return [lastBetText, netWinningsText, aggregatedText].filter(Boolean).join(" · ").slice(0, 60) || "—";
+  }
+
+  function clientColor(clientName = "") {
+    const key = String(clientName).trim().toLowerCase();
+    const colors = {
+      "mac88": ["rgba(50,124,240,.14)", "#2563eb"],
+      "iconic21": ["rgba(121,92,246,.14)", "#6d28d9"],
+      "digitain": ["rgba(228,116,142,.14)", "#c2416c"],
+      "enjoy gaming": ["rgba(41,185,121,.15)", "#15803d"],
+      "amazing gaming": ["rgba(245,158,11,.16)", "#b45309"],
+      "ballys": ["rgba(240,171,0,.16)", "#b45309"],
+      "mgasia": ["rgba(16,185,129,.16)", "#0f766e"],
+      "royal gaming": ["rgba(99,102,241,.14)", "#4338ca"],
+      "stakelogic": ["rgba(34,197,94,.14)", "#15803d"],
+      "onetouch": ["rgba(6,182,212,.14)", "#0f766e"],
+      "animo": ["rgba(100,116,139,.14)", "#475569"],
+      "live vegas": ["rgba(132,204,22,.18)", "#3f6212"],
+    };
+    return colors[key] || ["rgba(17,24,39,.08)", t().ink];
+  }
+
+  function t() {
+    return theme();
+  }
+
+  function ageColor(hours) {
+    if (typeof hours !== "number") {
+      return ["transparent", t().inkSoft];
+    }
+    if (hours > 3) {
+      return ["rgba(214,75,109,.16)", lightMode ? "#a3294a" : "#ffd9e2"];
+    }
+    return ["rgba(213,139,29,.18)", lightMode ? "#9a5d00" : "#f2c46d"];
   }
 
   function restoreOriginalClient() {
