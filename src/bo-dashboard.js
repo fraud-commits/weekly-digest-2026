@@ -23,6 +23,7 @@
   const NIGHT_ONLY_TYPES = new Set(["robotPlayers", "dealerPlayerMargin"]);
   const NIGHT_FILTER_STORAGE_KEY = "bo-checklist-ignore-night-only-v1";
   const MODE_STORAGE_KEY = "bo-checklist-mode-v1";
+  const THEME_STORAGE_KEY = "bo-checklist-theme-v1";
 
   if (window[TIMER_FLAG]) {
     window.clearTimeout(window[TIMER_FLAG]);
@@ -40,48 +41,105 @@
   let userConsented = false;
   let ignoreNightOnly = localStorage.getItem(NIGHT_FILTER_STORAGE_KEY) === "1";
   let fullscreen = localStorage.getItem(MODE_STORAGE_KEY) === "full";
+  let lightMode = localStorage.getItem(THEME_STORAGE_KEY) === "light";
   let originalClientId = null;
   let statusLine = "Ready. Press Scan.";
 
-  const CORNER_CSS = [
-    "position:fixed",
-    "right:16px",
-    "bottom:16px",
-    "z-index:2147483000",
-    "width:min(780px,94vw)",
-    "max-height:74vh",
-    "overflow:auto",
-    "background:#043927",
-    "color:#EFFFFB",
-    'font:13px/1.45 "Segoe UI",system-ui,sans-serif',
-    "border:1px solid rgba(239,255,251,.16)",
-    "border-radius:16px",
-    "box-shadow:0 24px 60px rgba(0,0,0,.45)",
-    "padding:0",
-    "margin:0",
-  ].join(";");
-  const FULL_CSS = [
-    "position:fixed",
-    "left:0",
-    "top:0",
-    "right:0",
-    "bottom:0",
-    "z-index:2147483000",
-    "width:100vw",
-    "max-height:100vh",
-    "overflow:auto",
-    "background:#043927",
-    "color:#EFFFFB",
-    'font:15px/1.5 "Segoe UI",system-ui,sans-serif',
-    "border:0",
-    "border-radius:0",
-    "box-shadow:none",
-    "padding:0",
-    "margin:0",
-  ].join(";");
+  function theme() {
+    return lightMode
+      ? {
+          surface: "#F6F9F7",
+          surfaceRaised: "#FFFFFF",
+          ink: "#0A2A20",
+          inkSoft: "rgba(10,42,32,.65)",
+          inkFaint: "rgba(10,42,32,.35)",
+          line: "rgba(4,57,39,.10)",
+          lineSoft: "rgba(4,57,39,.06)",
+          fill: "rgba(4,57,39,.05)",
+          chipFill: "rgba(4,57,39,.06)",
+          chipLine: "rgba(4,57,39,.14)",
+          quickFill: "rgba(0,152,125,.15)",
+          quickLine: "rgba(0,152,125,.45)",
+          accent: "#00987D",
+          hot: "#00987D",
+          zero: "rgba(10,42,32,.35)",
+          warnFill: "rgba(214,75,109,.10)",
+          warnLine: "rgba(214,75,109,.35)",
+          warnInk: "#8A2A44",
+          headBg: "#FFFFFF",
+          tableHeadBg: "#E3EFE9",
+          shadow: "0 24px 60px rgba(4,57,39,.25)",
+        }
+      : {
+          surface: "#043927",
+          surfaceRaised: "#043927",
+          ink: "#EFFFFB",
+          inkSoft: "rgba(239,255,251,.75)",
+          inkFaint: "rgba(239,255,251,.4)",
+          line: "rgba(239,255,251,.16)",
+          lineSoft: "rgba(239,255,251,.08)",
+          fill: "rgba(239,255,251,.06)",
+          chipFill: "rgba(239,255,251,.08)",
+          chipLine: "rgba(239,255,251,.12)",
+          quickFill: "rgba(0,152,125,.25)",
+          quickLine: "rgba(0,152,125,.5)",
+          accent: "#00987D",
+          hot: "#7CE3C3",
+          zero: "rgba(239,255,251,.4)",
+          warnFill: "rgba(214,75,109,.18)",
+          warnLine: "rgba(214,75,109,.35)",
+          warnInk: "#ffd9e2",
+          headBg: "#043927",
+          tableHeadBg: "#062d1e",
+          shadow: "0 24px 60px rgba(0,0,0,.45)",
+        };
+  }
+
+  const CORNER_CSS = () => {
+    const t = theme();
+    return [
+      "position:fixed",
+      "right:16px",
+      "bottom:16px",
+      "z-index:2147483000",
+      "width:min(780px,94vw)",
+      "max-height:74vh",
+      "overflow:auto",
+      `background:${t.surface}`,
+      `color:${t.ink}`,
+      'font:13px/1.45 "Segoe UI",system-ui,sans-serif',
+      `border:1px solid ${t.line}`,
+      "border-radius:16px",
+      `box-shadow:${t.shadow}`,
+      "padding:0",
+      "margin:0",
+    ].join(";");
+  };
+  const FULL_CSS = () => {
+    const t = theme();
+    return [
+      "position:fixed",
+      "left:0",
+      "top:0",
+      "right:0",
+      "bottom:0",
+      "z-index:2147483000",
+      "width:100vw",
+      "max-height:100vh",
+      "overflow:auto",
+      `background:${t.surface}`,
+      `color:${t.ink}`,
+      'font:15px/1.5 "Segoe UI",system-ui,sans-serif',
+      "border:0",
+      "border-radius:0",
+      "box-shadow:none",
+      "padding:0",
+      "margin:0",
+    ].join(";");
+  };
 
   function applyMode() {
-    root.style.cssText = fullscreen ? FULL_CSS : CORNER_CSS;
+    root.style.cssText = fullscreen ? FULL_CSS() : CORNER_CSS();
   }
 
   document.addEventListener("keydown", (event) => {
@@ -121,15 +179,16 @@
   }
 
   function mkBtn(label, onClick, disabled) {
+    const t = theme();
     const button = mk(
       "button",
       [
-        "border:1px solid rgba(239,255,251,.16)",
+        `border:1px solid ${t.line}`,
         "border-radius:10px",
         "padding:7px 12px",
         'font:700 12px/1 "Segoe UI",system-ui,sans-serif',
-        "color:#EFFFFB",
-        "background:rgba(239,255,251,.10)",
+        `color:${t.ink}`,
+        `background:${t.fill}`,
         "cursor:pointer",
         disabled ? "opacity:.5" : "",
       ]
@@ -337,24 +396,26 @@
   }
 
   function addStat(statsGrid, value, label) {
+    const t = theme();
     statsGrid.appendChild(
       mk(
         "div",
-        "background:rgba(239,255,251,.06);border:1px solid rgba(239,255,251,.10);border-radius:12px;padding:10px 12px;display:grid;gap:2px;",
-        `<strong style="font-size:${fullscreen ? 26 : 18}px;">${escapeHtml(value)}</strong><span style="font-size:${fullscreen ? 13 : 11}px;color:rgba(239,255,251,.65);">${escapeHtml(label)}</span>`,
+        `background:${t.fill};border:1px solid ${t.lineSoft};border-radius:12px;padding:10px 12px;display:grid;gap:2px;`,
+        `<strong style="font-size:${fullscreen ? 26 : 18}px;">${escapeHtml(value)}</strong><span style="font-size:${fullscreen ? 13 : 11}px;color:${t.inkSoft};">${escapeHtml(label)}</span>`,
       ),
     );
   }
 
   function addChip(cell, label, count, isQuick) {
+    const t = theme();
     cell.appendChild(
       mk(
         "span",
         [
           `display:inline-block;margin:2px 4px 2px 0;padding:${fullscreen ? "5px 12px" : "3px 8px"};border-radius:999px;font-size:${fullscreen ? 12.5 : 11}px;`,
           isQuick
-            ? "background:rgba(0,152,125,.25);border:1px solid rgba(0,152,125,.5);"
-            : "background:rgba(239,255,251,.08);border:1px solid rgba(239,255,251,.12);",
+            ? `background:${t.quickFill};border:1px solid ${t.quickLine};`
+            : `background:${t.chipFill};border:1px solid ${t.chipLine};`,
         ].join(""),
         `${escapeHtml(label)} ${escapeHtml(count)}`,
       ),
@@ -362,6 +423,7 @@
   }
 
   function render(payload, extra = {}) {
+    const t = theme();
     const data = payload ? applyNightOnlyFilter(payload) : null;
     const clients = data?.clients || [];
     const uncheckedCases = clients.reduce((sum, client) => sum + client.total, 0);
@@ -373,13 +435,13 @@
 
     const head = mk(
       "div",
-      "display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(239,255,251,.12);position:sticky;top:0;background:#043927;z-index:2;",
+      `display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid ${t.line};position:sticky;top:0;background:${t.headBg};z-index:2;`,
     );
     head.appendChild(
       mk(
         "div",
-        "font-weight:800;letter-spacing:-.01em;",
-        `BO Checklist <span style="color:#00987D;font-size:11px;margin-left:6px;font-weight:700;">${escapeHtml(VERSION)}</span>`,
+        `font-weight:800;letter-spacing:-.01em;color:${t.ink};`,
+        `BO Checklist <span style="color:${t.accent};font-size:11px;margin-left:6px;font-weight:700;">${escapeHtml(VERSION)}</span>`,
       ),
     );
 
@@ -396,6 +458,14 @@
       mkBtn(fullscreen ? "Exit full screen" : "Full screen", () => {
         fullscreen = !fullscreen;
         localStorage.setItem(MODE_STORAGE_KEY, fullscreen ? "full" : "corner");
+        applyMode();
+        render(currentPayload);
+      }),
+    );
+    tools.appendChild(
+      mkBtn(lightMode ? "Dark mode" : "Light mode", () => {
+        lightMode = !lightMode;
+        localStorage.setItem(THEME_STORAGE_KEY, lightMode ? "light" : "dark");
         applyMode();
         render(currentPayload);
       }),
@@ -421,7 +491,7 @@
     root.appendChild(
       mk(
         "div",
-        "padding:10px 14px;color:rgba(239,255,251,.75);border-bottom:1px solid rgba(239,255,251,.08);",
+        `padding:10px 14px;color:${t.inkSoft};border-bottom:1px solid ${t.lineSoft};`,
         `${escapeHtml(extra.progressLine || statusLine)} · Updated ${escapeHtml(formatStamp(data?.snapshotDate))}`,
       ),
     );
@@ -445,7 +515,7 @@
         root.appendChild(
           mk(
             "div",
-            "margin:0 14px 10px;padding:10px 12px;border-radius:10px;background:rgba(214,75,109,.18);border:1px solid rgba(214,75,109,.35);color:#ffd9e2;",
+            `margin:0 14px 10px;padding:10px 12px;border-radius:10px;background:${t.warnFill};border:1px solid ${t.warnLine};color:${t.warnInk};`,
             escapeHtml(line),
           ),
         );
@@ -464,7 +534,7 @@
         mk(
           "th",
           [
-            `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid rgba(239,255,251,.08);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:rgba(239,255,251,.6);background:#062d1e;`,
+            `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid ${t.lineSoft};font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:${t.inkSoft};background:${t.tableHeadBg};`,
             fullscreen ? `width:${["22%", "8%", "70%"][columnIndex]};` : "",
           ].join(""),
           escapeHtml(title),
@@ -480,7 +550,7 @@
       emptyRow.appendChild(
         mk(
           "td",
-          "text-align:center;color:rgba(239,255,251,.6);padding:18px;",
+          `text-align:center;color:${t.inkFaint};padding:18px;`,
           "No data yet. Press Scan.",
         ),
       );
@@ -489,12 +559,12 @@
     }
     clients.forEach((client) => {
       const row = mk("tr");
-      const cellCss = `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid rgba(239,255,251,.08);vertical-align:top;`;
+      const cellCss = `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid ${t.lineSoft};vertical-align:top;`;
       row.appendChild(mk("td", cellCss, escapeHtml(client.client)));
       row.appendChild(
         mk(
           "td",
-          `${cellCss}font-weight:800;color:${client.total > 0 ? "#7CE3C3" : "rgba(239,255,251,.4)"};`,
+          `${cellCss}font-weight:800;color:${client.total > 0 ? t.hot : t.zero};`,
           escapeHtml(client.total),
         ),
       );
