@@ -1124,10 +1124,11 @@
     tableWrap.appendChild(table);
     root.appendChild(tableWrap);
 
-    const reportQueue = data?.reportQueue || [];
+    const reportQueue = (data?.reportQueue || []).filter((item) => !isQuickReport(item));
+    const quickQueue = (data?.reportQueue || []).filter(isQuickReport);
     const completedQueue = data?.completedQueue || [];
 
-    if (reportQueue.length || completedQueue.length) {
+    if (reportQueue.length || quickQueue.length || completedQueue.length) {
       const queuesWrap = mk(
         "div",
         fullscreen
@@ -1163,9 +1164,9 @@
             mk(
               "div",
               "display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;",
-              `<span style="${isQuickReport(item) ? `background:${t.quickFill};border:1px solid ${t.quickLine};` : `background:${t.chipFill};border:1px solid ${t.chipLine};`}display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;">${escapeHtml(item.client)}</span>` +
+              `<span style="background:${t.chipFill};border:1px solid ${t.chipLine};display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;">${escapeHtml(item.client)}</span>` +
                 `<span style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.playerId)}</span>` +
-                (item.overdue ? `<span style="color:${t.warnInk};font-size:10px;font-weight:700;">overdue</span>` : ""),
+                (item.overdue && !isCompleted ? `<span style="color:${t.warnInk};font-size:10px;font-weight:700;">overdue</span>` : ""),
             ),
           );
           line.appendChild(
@@ -1185,13 +1186,9 @@
         return card;
       };
 
-      if (fullscreen) {
-        queuesWrap.appendChild(buildQueueCard("Report queue", reportQueue, false));
-        queuesWrap.appendChild(buildQueueCard("Completed reports", completedQueue, true));
-      } else {
-        queuesWrap.appendChild(buildQueueCard("Report queue", reportQueue, false));
-        queuesWrap.appendChild(buildQueueCard("Completed reports", completedQueue, true));
-      }
+      queuesWrap.appendChild(buildQueueCard("Winner report queue", reportQueue, false));
+      queuesWrap.appendChild(buildQueueCard("Quick report queue", quickQueue, false));
+      queuesWrap.appendChild(buildQueueCard("Completed reports", completedQueue, true));
 
       root.appendChild(queuesWrap);
     }
@@ -1310,7 +1307,7 @@
       for (let index = 0; index < clients.length; index += 1) {
         const clientRef = clients[index];
         statusLine = `Scanning ${index + 1} / ${clients.length}`;
-        render(null, { progressLine: `${statusLine} — ${clientRef.client}` });
+        render(currentPayload, { progressLine: `${statusLine} — ${clientRef.client}` });
 
         await boFetch(`/ajax.php?q=core/userTeamSelect&type=lfs&val=${encodeURIComponent(clientRef.id)}`);
         const toCheckHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
@@ -1350,9 +1347,8 @@
         }
 
         results.push({ ...overview, ...winnerCounts });
-        statusLine = `Scanning ${index + 1} / ${clients.length}`;
         render(
-          null,
+          currentPayload,
           {
             progressLine: `${statusLine} — ${clientRef.client} (winner ${winnerCounts.winnerReports ?? "?"}, quick ${winnerCounts.quickReports ?? "?"})`,
           },
