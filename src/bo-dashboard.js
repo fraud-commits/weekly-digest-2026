@@ -1115,7 +1115,16 @@
     workClients.forEach((client) => {
       const row = mk("tr");
       const cellCss = `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid ${t.lineSoft};vertical-align:top;`;
-      row.appendChild(mk("td", cellCss, escapeHtml(client.client)));
+      const [clientFill, clientInk] = clientColor(client.client);
+      const clientCell = mk("td", cellCss);
+      clientCell.appendChild(
+        mk(
+          "span",
+          `display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:${clientFill};color:${clientInk};border:1px solid ${clientInk}55;font-weight:700;`,
+          escapeHtml(client.client),
+        ),
+      );
+      row.appendChild(clientCell);
       row.appendChild(
         mk(
           "td",
