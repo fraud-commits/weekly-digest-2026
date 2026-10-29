@@ -453,14 +453,20 @@
     }
 
     const tableWrap = mk("div", `padding:${fullscreen ? "0 24px 24px" : "0 14px 14px"};overflow:auto;`);
-    const table = mk("table", `width:100%;border-collapse:collapse;font-size:${fullscreen ? 15 : 12.5}px;`);
+    const table = mk(
+      "table",
+      `width:100%;border-collapse:collapse;font-size:${fullscreen ? 15 : 12.5}px;table-layout:${fullscreen ? "fixed" : "auto"};`,
+    );
     const thead = mk("thead");
     const headRow = mk("tr");
-    ["Client", "Total", "Non-zero tabs"].forEach((title) => {
+    ["Client", "Total", "Non-zero tabs"].forEach((title, columnIndex) => {
       headRow.appendChild(
         mk(
           "th",
-          `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid rgba(239,255,251,.08);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:rgba(239,255,251,.6);background:#062d1e;`,
+          [
+            `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid rgba(239,255,251,.08);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:rgba(239,255,251,.6);background:#062d1e;`,
+            fullscreen ? `width:${["22%", "8%", "70%"][columnIndex]};` : "",
+          ].join(""),
           escapeHtml(title),
         ),
       );
