@@ -1186,7 +1186,7 @@
           const [ageFill, ageInk] = isQuickReport(item) || isCompleted ? ["transparent", t.inkSoft] : ageColor(item.lastBetHours);
           const line = mk(
             "div",
-            `display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:4px;background:${ageFill === "transparent" ? t.surfaceRaised : ageFill};border:1px solid ${t.chipLine};font-size:12px;`,
+            `display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:4px;background:${t.surfaceRaised};border:1px solid ${t.chipLine};font-size:12px;`,
           );
           line.appendChild(
             mk(
@@ -1200,12 +1200,11 @@
           line.appendChild(
             mk(
               "div",
-              `color:${t.inkSoft};font-size:11px;white-space:nowrap;`,
-              escapeHtml(
-                isCompleted
-                  ? item.pdfName || "PDF ready"
-                  : trimDetail(item.lastBetText, item.netWinningsText, item.aggregatedText),
-              ),
+              `color:${t.inkSoft};font-size:11px;white-space:nowrap;display:flex;align-items:center;gap:5px;`,
+              isCompleted
+                ? escapeHtml(item.pdfName || "PDF ready")
+                : `<span style="${ageFill === "transparent" ? "" : `background:${ageFill};color:${ageInk};`}padding:3px 7px;border-radius:999px;">${escapeHtml(item.lastBetText || "Time unknown")}</span>` +
+                  `${item.netWinningsText || item.aggregatedText ? `<span>${escapeHtml([item.netWinningsText, item.aggregatedText].filter(Boolean).join(" · "))}</span>` : ""}`,
             ),
           );
           card.appendChild(line);
