@@ -22,6 +22,7 @@
   const SCAN_STEP_DELAY_MS = 250;
   const NIGHT_ONLY_TYPES = new Set(["robotPlayers", "dealerPlayerMargin"]);
   const NIGHT_FILTER_STORAGE_KEY = "bo-checklist-ignore-night-only-v1";
+  const MODE_STORAGE_KEY = "bo-checklist-mode-v1";
 
   if (window[TIMER_FLAG]) {
     window.clearTimeout(window[TIMER_FLAG]);
@@ -38,12 +39,11 @@
   let isScanning = false;
   let userConsented = false;
   let ignoreNightOnly = localStorage.getItem(NIGHT_FILTER_STORAGE_KEY) === "1";
+  let fullscreen = localStorage.getItem(MODE_STORAGE_KEY) === "full";
   let originalClientId = null;
   let statusLine = "Ready. Press Scan.";
 
-  const root = document.createElement("div");
-  root.id = PANEL_ID;
-  root.style.cssText = [
+  const CORNER_CSS = [
     "position:fixed",
     "right:16px",
     "bottom:16px",
@@ -60,6 +60,42 @@
     "padding:0",
     "margin:0",
   ].join(";");
+  const FULL_CSS = [
+    "position:fixed",
+    "left:0",
+    "top:0",
+    "right:0",
+    "bottom:0",
+    "z-index:2147483000",
+    "width:100vw",
+    "max-height:100vh",
+    "overflow:auto",
+    "background:#043927",
+    "color:#EFFFFB",
+    'font:15px/1.5 "Segoe UI",system-ui,sans-serif',
+    "border:0",
+    "border-radius:0",
+    "box-shadow:none",
+    "padding:0",
+    "margin:0",
+  ].join(";");
+
+  function applyMode() {
+    root.style.cssText = fullscreen ? FULL_CSS : CORNER_CSS;
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (fullscreen && event.key === "Escape") {
+      fullscreen = false;
+      localStorage.setItem(MODE_STORAGE_KEY, "corner");
+      applyMode();
+      render(currentPayload);
+    }
+  });
+
+  const root = document.createElement("div");
+  root.id = PANEL_ID;
+  applyMode();
   document.body.appendChild(root);
 
   // Self-healing: if the host page re-renders and drops the panel, put it back.
@@ -305,7 +341,7 @@
       mk(
         "div",
         "background:rgba(239,255,251,.06);border:1px solid rgba(239,255,251,.10);border-radius:12px;padding:10px 12px;display:grid;gap:2px;",
-        `<strong style="font-size:18px;">${escapeHtml(value)}</strong><span style="font-size:11px;color:rgba(239,255,251,.65);">${escapeHtml(label)}</span>`,
+        `<strong style="font-size:${fullscreen ? 26 : 18}px;">${escapeHtml(value)}</strong><span style="font-size:${fullscreen ? 13 : 11}px;color:rgba(239,255,251,.65);">${escapeHtml(label)}</span>`,
       ),
     );
   }
@@ -315,7 +351,7 @@
       mk(
         "span",
         [
-          "display:inline-block;margin:2px 4px 2px 0;padding:3px 8px;border-radius:999px;font-size:11px;",
+          `display:inline-block;margin:2px 4px 2px 0;padding:${fullscreen ? "5px 12px" : "3px 8px"};border-radius:999px;font-size:${fullscreen ? 12.5 : 11}px;`,
           isQuick
             ? "background:rgba(0,152,125,.25);border:1px solid rgba(0,152,125,.5);"
             : "background:rgba(239,255,251,.08);border:1px solid rgba(239,255,251,.12);",
@@ -357,6 +393,14 @@
     );
     tools.appendChild(mkBtn(isScanning ? "Scanning..." : "Scan", () => runScan(true), isScanning));
     tools.appendChild(
+      mkBtn(fullscreen ? "Exit full screen" : "Full screen", () => {
+        fullscreen = !fullscreen;
+        localStorage.setItem(MODE_STORAGE_KEY, fullscreen ? "full" : "corner");
+        applyMode();
+        render(currentPayload);
+      }),
+    );
+    tools.appendChild(
       mkBtn(minimized ? "Show" : "Hide", () => {
         root.dataset.minimized = minimized ? "0" : "1";
         render(currentPayload);
@@ -386,7 +430,10 @@
       return;
     }
 
-    const statsGrid = mk("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 14px;");
+    const statsGrid = mk(
+      "div",
+      `display:grid;grid-template-columns:repeat(4,1fr);gap:${fullscreen ? 10 : 8}px;padding:${fullscreen ? "20px 24px" : "12px 14px"};`,
+    );
     addStat(statsGrid, uncheckedCases, "Unchecked total");
     addStat(statsGrid, clientsWithBacklog, "Clients with work");
     addStat(statsGrid, largest?.client || "—", "Largest backlog");
@@ -405,15 +452,15 @@
       });
     }
 
-    const tableWrap = mk("div", "padding:0 14px 14px;overflow:auto;");
-    const table = mk("table", "width:100%;border-collapse:collapse;font-size:12.5px;");
+    const tableWrap = mk("div", `padding:${fullscreen ? "0 24px 24px" : "0 14px 14px"};overflow:auto;`);
+    const table = mk("table", `width:100%;border-collapse:collapse;font-size:${fullscreen ? 15 : 12.5}px;`);
     const thead = mk("thead");
     const headRow = mk("tr");
     ["Client", "Total", "Non-zero tabs"].forEach((title) => {
       headRow.appendChild(
         mk(
           "th",
-          "text-align:left;padding:8px 10px;border-bottom:1px solid rgba(239,255,251,.08);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:rgba(239,255,251,.6);background:#062d1e;",
+          `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid rgba(239,255,251,.08);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:rgba(239,255,251,.6);background:#062d1e;`,
           escapeHtml(title),
         ),
       );
@@ -436,17 +483,16 @@
     }
     clients.forEach((client) => {
       const row = mk("tr");
-      row.appendChild(
-        mk("td", "text-align:left;padding:8px 10px;border-bottom:1px solid rgba(239,255,251,.08);vertical-align:top;", escapeHtml(client.client)),
-      );
+      const cellCss = `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid rgba(239,255,251,.08);vertical-align:top;`;
+      row.appendChild(mk("td", cellCss, escapeHtml(client.client)));
       row.appendChild(
         mk(
           "td",
-          `text-align:left;padding:8px 10px;border-bottom:1px solid rgba(239,255,251,.08);vertical-align:top;font-weight:800;color:${client.total > 0 ? "#7CE3C3" : "rgba(239,255,251,.4)"};`,
+          `${cellCss}font-weight:800;color:${client.total > 0 ? "#7CE3C3" : "rgba(239,255,251,.4)"};`,
           escapeHtml(client.total),
         ),
       );
-      const tabsCell = mk("td", "text-align:left;padding:8px 10px;border-bottom:1px solid rgba(239,255,251,.08);vertical-align:top;");
+      const tabsCell = mk("td", cellCss);
       (client.nonZero || []).forEach((item) => {
         addChip(tabsCell, item.label, item.count, item.type === "quickReports");
       });
