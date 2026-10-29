@@ -31,6 +31,7 @@
   let currentHeight = 0;
   let currentPayload = null;
   let isScanning = false;
+  let userConsented = false;
   let ignoreNightOnly = localStorage.getItem(NIGHT_FILTER_STORAGE_KEY) === "1";
   let originalClientId = null;
   let statusLine = "Ready. Press Scan.";
@@ -418,6 +419,22 @@
   async function runScan(force = false) {
     if (isScanning) {
       return;
+    }
+
+    if (!userConsented) {
+      userConsented = window.confirm(
+        "BO Checklist: a scan switches the active BO client in THIS browser session.\n\n" +
+          "Recommended: run this in a separate browser or an incognito window with its own BO login, " +
+          "not in the browser you work in.\n\nStart the scan here?",
+      );
+      if (!userConsented) {
+        statusLine = "Scan cancelled. Open lfscbo.com in a separate browser session and press Scan there.";
+        if (!currentPayload) {
+          currentPayload = { snapshotDate: null, ticketing: null, clients: [], warnings: [] };
+        }
+        render(currentPayload);
+        return;
+      }
     }
 
     isScanning = true;

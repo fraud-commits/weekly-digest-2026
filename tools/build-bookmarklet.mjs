@@ -17,7 +17,14 @@ const srcPath = path.join(projectRoot, "src", "bo-dashboard.js");
 const distPath = path.join(projectRoot, "docs");
 
 const version = process.argv[2] || "v1";
-const code = await readFile(srcPath, "utf8");
+const code0 = await readFile(srcPath, "utf8");
+const code = code0.replace(
+  'const VERSION = "v1";',
+  `const VERSION = ${JSON.stringify(version)};`,
+);
+if (code === code0) {
+  console.error("WARN: VERSION placeholder not found, using source value");
+}
 
 // Syntax gate: fail the build on invalid JS instead of shipping a broken bookmark.
 new vm.Script(code);
