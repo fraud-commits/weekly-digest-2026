@@ -1096,19 +1096,23 @@
     table.appendChild(thead);
 
     const tbody = mk("tbody");
-    if (!clients.length) {
+    const workClients = clients.filter(
+      (client) =>
+        client.total > 0 || (Number(client.winnerReports) || 0) > 0 || (Number(client.quickReports) || 0) > 0,
+    );
+    if (!workClients.length) {
       const emptyRow = mk("tr");
       emptyRow.appendChild(
         mk(
           "td",
           `text-align:center;color:${t.inkFaint};padding:18px;`,
-          "No data yet. Press Scan.",
+          "All clear — no clients with pending work.",
         ),
       );
       emptyRow.firstChild.colSpan = 4;
       tbody.appendChild(emptyRow);
     }
-    clients.forEach((client) => {
+    workClients.forEach((client) => {
       const row = mk("tr");
       const cellCss = `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid ${t.lineSoft};vertical-align:top;`;
       row.appendChild(mk("td", cellCss, escapeHtml(client.client)));
