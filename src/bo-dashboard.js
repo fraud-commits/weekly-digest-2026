@@ -1,7 +1,8 @@
 /*!
  * BO Checklist Dashboard (bookmarklet build)
  * Runs inside an authenticated lfscbo.com page. No server, no extension.
- * Reuses the parsing flow of the local server build (overview only, v1).
+ * Reuses the parsing flow of the local server build (overview only).
+ * Rendering is fully inline-styled so page CSS, re-renders and CSP cannot hide it.
  */
 (function () {
   "use strict";
@@ -12,6 +13,8 @@
   }
 
   const PANEL_ID = "bo-checklist-dashboard";
+  const TIMER_FLAG = "__boChecklistTimer";
+  const CLOSED_FLAG = "__boChecklistClosed";
   const REFRESH_MS = 5 * 60 * 1000;
   const LATE_TAB_WAIT_MS = 1200;
   const LATE_TAB_MAX_ATTEMPTS = 4;
@@ -19,16 +22,18 @@
   const SCAN_STEP_DELAY_MS = 250;
   const NIGHT_ONLY_TYPES = new Set(["robotPlayers", "dealerPlayerMargin"]);
   const NIGHT_FILTER_STORAGE_KEY = "bo-checklist-ignore-night-only-v1";
-  const VERSION = "v1";
 
-  if (window.__boChecklistTimer) {
-    window.clearTimeout(window.__boChecklistTimer);
-    window.__boChecklistTimer = null;
+  if (window[TIMER_FLAG]) {
+    window.clearTimeout(window[TIMER_FLAG]);
+    window[TIMER_FLAG] = null;
   }
+  window[CLOSED_FLAG] = false;
 
   document.getElementById(PANEL_ID)?.remove();
+  document.getElementById(`${PANEL_ID}-style`)?.remove();
 
-  let currentHeight = 0;
+  const VERSION = "v1";
+
   let currentPayload = null;
   let isScanning = false;
   let userConsented = false;
@@ -38,81 +43,71 @@
 
   const root = document.createElement("div");
   root.id = PANEL_ID;
+  root.style.cssText = [
+    "position:fixed",
+    "right:16px",
+    "bottom:16px",
+    "z-index:2147483000",
+    "width:min(780px,94vw)",
+    "max-height:74vh",
+    "overflow:auto",
+    "background:#043927",
+    "color:#EFFFFB",
+    'font:13px/1.45 "Segoe UI",system-ui,sans-serif',
+    "border:1px solid rgba(239,255,251,.16)",
+    "border-radius:16px",
+    "box-shadow:0 24px 60px rgba(0,0,0,.45)",
+    "padding:0",
+    "margin:0",
+  ].join(";");
+  document.body.appendChild(root);
 
-  function ensureStyles() {
-    if (document.getElementById(`${PANEL_ID}-style`)) {
+  // Self-healing: if the host page re-renders and drops the panel, put it back.
+  const heartbeat = window.setInterval(() => {
+    if (window[CLOSED_FLAG]) {
+      window.clearInterval(heartbeat);
       return;
     }
-    const style = document.createElement("style");
-    style.id = `${PANEL_ID}-style`;
-    style.textContent = `
-      #${PANEL_ID} {
-        position: fixed; right: 16px; bottom: 16px; z-index: 999999;
-        width: min(780px, 94vw); max-height: 74vh;
-        font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
-      }
-      #${PANEL_ID} .bc-card {
-        width: 100%; max-height: 74vh; overflow: auto;
-        background: #043927; color: #EFFFFB;
-        border: 1px solid rgba(239,255,251,.16); border-radius: 16px;
-        box-shadow: 0 24px 60px rgba(0,0,0,.45);
-      }
-      #${PANEL_ID} .bc-head {
-        display: flex; align-items: center; justify-content: space-between; gap: 10px;
-        padding: 12px 14px; border-bottom: 1px solid rgba(239,255,251,.12);
-        position: sticky; top: 0; background: #043927; z-index: 2;
-      }
-      #${PANEL_ID} .bc-title { font-weight: 800; letter-spacing: -.01em; }
-      #${PANEL_ID} .bc-ver { color: #00987D; font-size: 11px; margin-left: 6px; font-weight: 700; }
-      #${PANEL_ID} .bc-tools { display: flex; gap: 6px; }
-      #${PANEL_ID} .bc-btn {
-        border: 1px solid rgba(239,255,251,.16); border-radius: 10px; padding: 7px 12px;
-        font: 700 12px/1 "Segoe UI", system-ui, sans-serif; color: #EFFFFB;
-        background: rgba(239,255,251,.10); cursor: pointer;
-      }
-      #${PANEL_ID} .bc-btn:hover { background: rgba(0,152,125,.35); }
-      #${PANEL_ID} .bc-btn.disabled { opacity: .5; cursor: default; }
-      #${PANEL_ID} .bc-status {
-        padding: 10px 14px; color: rgba(239,255,251,.75);
-        border-bottom: 1px solid rgba(239,255,251,.08);
-      }
-      #${PANEL_ID} .bc-stats {
-        display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px 14px;
-      }
-      #${PANEL_ID} .bc-stat {
-        background: rgba(239,255,251,.06); border: 1px solid rgba(239,255,251,.10);
-        border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px;
-      }
-      #${PANEL_ID} .bc-stat strong { font-size: 18px; }
-      #${PANEL_ID} .bc-stat span { font-size: 11px; color: rgba(239,255,251,.65); }
-      #${PANEL_ID} .bc-warn {
-        margin: 0 14px 10px; padding: 10px 12px; border-radius: 10px;
-        background: rgba(214,75,109,.18); border: 1px solid rgba(214,75,109,.35); color: #ffd9e2;
-      }
-      #${PANEL_ID} .bc-tablewrap { padding: 0 14px 14px; overflow: auto; }
-      #${PANEL_ID} .bc-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-      #${PANEL_ID} .bc-table th, #${PANEL_ID} .bc-table td {
-        text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(239,255,251,.08); vertical-align: top;
-      }
-      #${PANEL_ID} .bc-table th {
-        font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
-        color: rgba(239,255,251,.6); background: #062d1e;
-      }
-      #${PANEL_ID} .bc-total { font-weight: 800; }
-      #${PANEL_ID} .bc-total.hot { color: #7CE3C3; }
-      #${PANEL_ID} .bc-total.zero { color: rgba(239,255,251,.4); }
-      #${PANEL_ID} .bc-chip {
-        display: inline-block; margin: 2px 4px 2px 0; padding: 3px 8px; border-radius: 999px;
-        background: rgba(239,255,251,.08); border: 1px solid rgba(239,255,251,.12); font-size: 11px;
-      }
-      #${PANEL_ID} .bc-chip.quick { background: rgba(0,152,125,.25); border-color: rgba(0,152,125,.5); }
-      #${PANEL_ID} .bc-empty { text-align: center; color: rgba(239,255,251,.6); padding: 18px; }
-    `;
-    document.head.appendChild(style);
+    if (!root.isConnected) {
+      document.body.appendChild(root);
+    }
+  }, 1500);
+
+  function mk(tag, cssText, html) {
+    const node = document.createElement(tag);
+    if (cssText) {
+      node.style.cssText = cssText;
+    }
+    if (html != null) {
+      node.innerHTML = html;
+    }
+    return node;
   }
 
-  ensureStyles();
-  document.body.appendChild(root);
+  function mkBtn(label, onClick, disabled) {
+    const button = mk(
+      "button",
+      [
+        "border:1px solid rgba(239,255,251,.16)",
+        "border-radius:10px",
+        "padding:7px 12px",
+        'font:700 12px/1 "Segoe UI",system-ui,sans-serif',
+        "color:#EFFFFB",
+        "background:rgba(239,255,251,.10)",
+        "cursor:pointer",
+        disabled ? "opacity:.5" : "",
+      ]
+        .filter(Boolean)
+        .join(";"),
+      escapeHtml(label),
+    );
+    if (disabled) {
+      button.disabled = true;
+    } else {
+      button.addEventListener("click", onClick);
+    }
+    return button;
+  }
 
   function decodeHtml(input = "") {
     return input
@@ -160,7 +155,6 @@
   async function boFetch(pathname) {
     const response = await fetch(pathname, {
       credentials: "same-origin",
-      referer: `${location.origin}/`,
     });
     if (!response.ok) {
       throw new Error(`BO ${pathname} → HTTP ${response.status}`);
@@ -306,6 +300,31 @@
     return { ...payload, clients: [...clients].sort((a, b) => b.total - a.total || a.client.localeCompare(b.client)) };
   }
 
+  function addStat(statsGrid, value, label) {
+    statsGrid.appendChild(
+      mk(
+        "div",
+        "background:rgba(239,255,251,.06);border:1px solid rgba(239,255,251,.10);border-radius:12px;padding:10px 12px;display:grid;gap:2px;",
+        `<strong style="font-size:18px;">${escapeHtml(value)}</strong><span style="font-size:11px;color:rgba(239,255,251,.65);">${escapeHtml(label)}</span>`,
+      ),
+    );
+  }
+
+  function addChip(cell, label, count, isQuick) {
+    cell.appendChild(
+      mk(
+        "span",
+        [
+          "display:inline-block;margin:2px 4px 2px 0;padding:3px 8px;border-radius:999px;font-size:11px;",
+          isQuick
+            ? "background:rgba(0,152,125,.25);border:1px solid rgba(0,152,125,.5);"
+            : "background:rgba(239,255,251,.08);border:1px solid rgba(239,255,251,.12);",
+        ].join(""),
+        `${escapeHtml(label)} ${escapeHtml(count)}`,
+      ),
+    );
+  }
+
   function render(payload, extra = {}) {
     const data = payload ? applyNightOnlyFilter(payload) : null;
     const clients = data?.clients || [];
@@ -314,95 +333,129 @@
     const largest = [...clients].sort((a, b) => b.total - a.total)[0] || null;
     const minimized = root.dataset.minimized === "1";
 
-    const rows = clients
-      .map(
-        (client) => `
-        <tr>
-          <td class="bc-client">${escapeHtml(client.client)}</td>
-          <td class="bc-total ${client.total > 0 ? "hot" : "zero"}">${escapeHtml(client.total)}</td>
-          <td class="bc-tabs">
-            ${(client.nonZero || [])
-              .map(
-                (item) =>
-                  `<span class="bc-chip ${item.type === "quickReports" ? "quick" : ""}">${escapeHtml(item.label)} ${escapeHtml(item.count)}</span>`,
-              )
-              .join("")}
-          </td>
-        </tr>`,
-      )
-      .join("");
+    root.innerHTML = "";
 
-    root.innerHTML = `
-      <div class="bc-card">
-        <div class="bc-head">
-          <div class="bc-title">BO Checklist <span class="bc-ver">${escapeHtml(VERSION)}</span></div>
-          <div class="bc-tools">
-            <button type="button" class="bc-btn" data-act="night">${ignoreNightOnly ? "Include night tabs" : "Hide night tabs"}</button>
-            <button type="button" class="bc-btn ${isScanning ? "disabled" : ""}" data-act="scan">${isScanning ? "Scanning..." : "Scan"}</button>
-            <button type="button" class="bc-btn" data-act="min">${minimized ? "Show" : "Hide"}</button>
-            <button type="button" class="bc-btn" data-act="close">Close</button>
-          </div>
-        </div>
+    const head = mk(
+      "div",
+      "display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(239,255,251,.12);position:sticky;top:0;background:#043927;z-index:2;",
+    );
+    head.appendChild(
+      mk(
+        "div",
+        "font-weight:800;letter-spacing:-.01em;",
+        `BO Checklist <span style="color:#00987D;font-size:11px;margin-left:6px;font-weight:700;">${escapeHtml(VERSION)}</span>`,
+      ),
+    );
 
-        ${
-          minimized
-            ? ""
-            : `
-        <div class="bc-status">${escapeHtml(extra.progressLine || statusLine)} · Updated ${escapeHtml(formatStamp(data?.snapshotDate))}</div>
+    const tools = mk("div", "display:flex;gap:6px;");
+    tools.appendChild(
+      mkBtn(ignoreNightOnly ? "Include night tabs" : "Hide night tabs", () => {
+        ignoreNightOnly = !ignoreNightOnly;
+        localStorage.setItem(NIGHT_FILTER_STORAGE_KEY, ignoreNightOnly ? "1" : "0");
+        render(currentPayload);
+      }),
+    );
+    tools.appendChild(mkBtn(isScanning ? "Scanning..." : "Scan", () => runScan(true), isScanning));
+    tools.appendChild(
+      mkBtn(minimized ? "Show" : "Hide", () => {
+        root.dataset.minimized = minimized ? "0" : "1";
+        render(currentPayload);
+      }),
+    );
+    tools.appendChild(
+      mkBtn("Close", () => {
+        window[CLOSED_FLAG] = true;
+        window.clearInterval(heartbeat);
+        window.clearTimeout(window[TIMER_FLAG]);
+        window[TIMER_FLAG] = null;
+        root.remove();
+      }),
+    );
+    head.appendChild(tools);
+    root.appendChild(head);
 
-        <div class="bc-stats">
-          <div class="bc-stat"><strong>${escapeHtml(uncheckedCases)}</strong><span>Unchecked total</span></div>
-          <div class="bc-stat"><strong>${escapeHtml(clientsWithBacklog)}</strong><span>Clients with work</span></div>
-          <div class="bc-stat"><strong>${escapeHtml(largest?.client || "—")}</strong><span>Largest backlog</span></div>
-          <div class="bc-stat"><strong>${escapeHtml(data?.ticketing?.requests ?? "—")}</strong><span>Ticketing requests</span></div>
-        </div>
+    root.appendChild(
+      mk(
+        "div",
+        "padding:10px 14px;color:rgba(239,255,251,.75);border-bottom:1px solid rgba(239,255,251,.08);",
+        `${escapeHtml(extra.progressLine || statusLine)} · Updated ${escapeHtml(formatStamp(data?.snapshotDate))}`,
+      ),
+    );
 
-        ${
-          data?.warnings?.length
-            ? `<div class="bc-warn">${data.warnings.map((line) => escapeHtml(line)).join("<br>")}</div>`
-            : ""
-        }
+    if (minimized) {
+      return;
+    }
 
-        <div class="bc-tablewrap">
-          <table class="bc-table">
-            <thead>
-              <tr><th>Client</th><th>Total</th><th>Non-zero tabs</th></tr>
-            </thead>
-            <tbody>
-              ${rows || `<tr><td colspan="3" class="bc-empty">No data yet. Press Scan.</td></tr>`}
-            </tbody>
-          </table>
-        </div>
-        `
-        }
-      </div>
-    `;
+    const statsGrid = mk("div", "display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 14px;");
+    addStat(statsGrid, uncheckedCases, "Unchecked total");
+    addStat(statsGrid, clientsWithBacklog, "Clients with work");
+    addStat(statsGrid, largest?.client || "—", "Largest backlog");
+    addStat(statsGrid, data?.ticketing?.requests ?? "—", "Ticketing requests");
+    root.appendChild(statsGrid);
 
-    root.querySelectorAll("[data-act]").forEach((button) => {
-      const action = button.dataset.act;
-      if (action === "scan" && isScanning) {
-        return;
-      }
-      button.addEventListener("click", () => {
-        if (action === "scan") {
-          runScan(true);
-        }
-        if (action === "night") {
-          ignoreNightOnly = !ignoreNightOnly;
-          localStorage.setItem(NIGHT_FILTER_STORAGE_KEY, ignoreNightOnly ? "1" : "0");
-          render(currentPayload);
-        }
-        if (action === "min") {
-          root.dataset.minimized = minimized ? "0" : "1";
-          render(currentPayload);
-        }
-        if (action === "close") {
-          window.clearTimeout(window.__boChecklistTimer);
-          window.__boChecklistTimer = null;
-          root.remove();
-        }
+    if (data?.warnings?.length) {
+      data.warnings.forEach((line) => {
+        root.appendChild(
+          mk(
+            "div",
+            "margin:0 14px 10px;padding:10px 12px;border-radius:10px;background:rgba(214,75,109,.18);border:1px solid rgba(214,75,109,.35);color:#ffd9e2;",
+            escapeHtml(line),
+          ),
+        );
       });
+    }
+
+    const tableWrap = mk("div", "padding:0 14px 14px;overflow:auto;");
+    const table = mk("table", "width:100%;border-collapse:collapse;font-size:12.5px;");
+    const thead = mk("thead");
+    const headRow = mk("tr");
+    ["Client", "Total", "Non-zero tabs"].forEach((title) => {
+      headRow.appendChild(
+        mk(
+          "th",
+          "text-align:left;padding:8px 10px;border-bottom:1px solid rgba(239,255,251,.08);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:rgba(239,255,251,.6);background:#062d1e;",
+          escapeHtml(title),
+        ),
+      );
     });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = mk("tbody");
+    if (!clients.length) {
+      const emptyRow = mk("tr");
+      emptyRow.appendChild(
+        mk(
+          "td",
+          "text-align:center;color:rgba(239,255,251,.6);padding:18px;",
+          "No data yet. Press Scan.",
+        ),
+      );
+      emptyRow.firstChild.colSpan = 3;
+      tbody.appendChild(emptyRow);
+    }
+    clients.forEach((client) => {
+      const row = mk("tr");
+      row.appendChild(
+        mk("td", "text-align:left;padding:8px 10px;border-bottom:1px solid rgba(239,255,251,.08);vertical-align:top;", escapeHtml(client.client)),
+      );
+      row.appendChild(
+        mk(
+          "td",
+          `text-align:left;padding:8px 10px;border-bottom:1px solid rgba(239,255,251,.08);vertical-align:top;font-weight:800;color:${client.total > 0 ? "#7CE3C3" : "rgba(239,255,251,.4)"};`,
+          escapeHtml(client.total),
+        ),
+      );
+      const tabsCell = mk("td", "text-align:left;padding:8px 10px;border-bottom:1px solid rgba(239,255,251,.08);vertical-align:top;");
+      (client.nonZero || []).forEach((item) => {
+        addChip(tabsCell, item.label, item.count, item.type === "quickReports");
+      });
+      row.appendChild(tabsCell);
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    root.appendChild(tableWrap);
   }
 
   function restoreOriginalClient() {
@@ -438,7 +491,6 @@
     }
 
     isScanning = true;
-    currentHeight = 0;
     statusLine = "Scanning...";
     render(currentPayload);
 
@@ -496,14 +548,11 @@
       isScanning = false;
       render(currentPayload);
 
-      if (force !== "manual") {
-        window.clearTimeout(window.__boChecklistTimer);
-        window.__boChecklistTimer = window.setTimeout(runScan, REFRESH_MS);
-      }
+      window.clearTimeout(window[TIMER_FLAG]);
+      window[TIMER_FLAG] = window.setTimeout(runScan, REFRESH_MS);
     }
   }
 
-  currentHeight = 0;
   root.dataset.minimized = "0";
   render(null);
   runScan("manual");
