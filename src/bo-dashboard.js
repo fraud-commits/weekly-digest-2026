@@ -73,7 +73,7 @@
   function theme() {
     return lightMode
       ? {
-          surface: "#EFFFFB",
+          surface: "#FFFFFF",
           surfaceRaised: "#FFFFFF",
           ink: "#0A2A20",
           inkSoft: "rgba(10,42,32,.65)",
@@ -1196,7 +1196,7 @@
               "display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;",
               `<span style="background:${clientFill};color:${clientInk};border:1px solid ${clientInk}55;display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;">${escapeHtml(item.client)}</span>` +
                 `<span style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.playerId)}</span>` +
-                (!isCompleted && typeof item.lastBetHours === "number" ? `<span style="color:${ageInk};font-size:10px;font-weight:700;">${item.lastBetHours > 3 ? "overdue" : "under 3h"}</span>` : ""),
+                (!isCompleted && item.lastBetHours > 3 ? `<span style="color:${ageInk};font-size:10px;font-weight:700;">overdue</span>` : ""),
             ),
           );
           line.appendChild(
