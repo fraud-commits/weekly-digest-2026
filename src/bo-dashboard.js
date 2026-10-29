@@ -73,7 +73,7 @@
   function theme() {
     return lightMode
       ? {
-          surface: "#F6F9F7",
+          surface: "#EFFFFB",
           surfaceRaised: "#FFFFFF",
           ink: "#0A2A20",
           inkSoft: "rgba(10,42,32,.65)",
@@ -91,8 +91,9 @@
           warnFill: "rgba(214,75,109,.10)",
           warnLine: "rgba(214,75,109,.35)",
           warnInk: "#8A2A44",
-          headBg: "#FFFFFF",
-          tableHeadBg: "#E3EFE9",
+          headBg: "#043927",
+          headInk: "#EFFFFB",
+          tableHeadBg: "#D8F4EA",
           shadow: "0 24px 60px rgba(4,57,39,.25)",
         }
       : {
@@ -115,6 +116,7 @@
           warnLine: "rgba(214,75,109,.35)",
           warnInk: "#ffd9e2",
           headBg: "#043927",
+          headInk: "#EFFFFB",
           tableHeadBg: "#062d1e",
           shadow: "0 24px 60px rgba(0,0,0,.45)",
         };
@@ -212,7 +214,7 @@
         "border-radius:10px",
         "padding:7px 12px",
         'font:700 12px/1 "Segoe UI",system-ui,sans-serif',
-        `color:${t.ink}`,
+        `color:${t.headInk}`,
         `background:${t.fill}`,
         "cursor:pointer",
         disabled ? "opacity:.5" : "",
@@ -986,7 +988,7 @@
     head.appendChild(
       mk(
         "div",
-        `font-weight:800;letter-spacing:-.01em;color:${t.ink};`,
+        `font-weight:800;letter-spacing:-.01em;color:${t.headInk};`,
         `BO Checklist <span style="color:${t.accent};font-size:11px;margin-left:6px;font-weight:700;">${escapeHtml(VERSION)}</span>`,
       ),
     );
