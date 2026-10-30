@@ -975,7 +975,7 @@
     const clients = data?.clients || [];
     const uncheckedCases = clients.reduce((sum, client) => sum + client.total, 0);
     const clientsWithBacklog = clients.filter((client) => client.total > 0).length;
-    const largest = [...clients].sort((a, b) => b.total - a.total)[0] || null;
+    const largest = [...clients].sort((a, b) => b.total - a.total).find((client) => client.total > 0) || null;
     const winnerLeft = clients.reduce((sum, client) => sum + (Number(client.winnerReports) || 0), 0);
     const pendingPlayers = (data?.reportQueue || []).length;
     const minimized = root.dataset.minimized === "1";
