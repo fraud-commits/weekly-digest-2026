@@ -24,6 +24,7 @@
   const SCAN_STEP_DELAY_MS = 250;
   const NIGHT_ONLY_TYPES = new Set(["robotPlayers", "dealerPlayerMargin"]);
   const NIGHT_FILTER_STORAGE_KEY = "bo-checklist-ignore-night-only-v1";
+  const HIDE_CLEAR_STORAGE_KEY = "bo-checklist-hide-clear-v1";
   const NOTIFICATIONS_STORAGE_KEY = "bo-request-notifications";
   const THEME_STORAGE_KEY = "bo-checklist-theme-v1";
   const COMPLETED_REPORTS_COLLAPSED_LIMIT = 5;
@@ -70,6 +71,7 @@
   let ticketingData = null;
   let userConsented = false;
   let ignoreNightOnly = localStorage.getItem(NIGHT_FILTER_STORAGE_KEY) === "1";
+  let hideClearClients = localStorage.getItem(HIDE_CLEAR_STORAGE_KEY) === "1";
   let originalClientId = null;
   let statusLine = "Ready. Press Scan.";
   let selectedDateIso = getIsoDate();
@@ -1045,7 +1047,15 @@
     }
 
     const visibleData = applyNightOnlyFilter(payload || { clients: [], warnings: [] });
-    const clients = [...(visibleData.clients || [])].sort((a, b) => b.total - a.total || a.client.localeCompare(b.client));
+    const clients = [...(visibleData.clients || [])]
+      .sort((a, b) => b.total - a.total || a.client.localeCompare(b.client))
+      .filter(
+        (client) =>
+          !hideClearClients ||
+          client.total > 0 ||
+          (Number(client.winnerReports) || 0) > 0 ||
+          (Number(client.quickReports) || 0) > 0,
+      );
     const activeClients = clients.filter((client) => client.total > 0);
     const idleClients = clients.filter((client) => client.total === 0);
     const hotspots = summariseHotspots(activeClients);
@@ -1110,6 +1120,7 @@
           <button type="button" id="yesterday-button">Yesterday</button>
           <button type="button" id="apply-date-button">Apply date</button>
           <button type="button" id="night-toggle-button">${ignoreNightOnly ? "Include night tabs" : "Hide night tabs"}</button>
+          <button type="button" id="hide-clear-button">${hideClearClients ? "Show clear clients" : "Hide clear clients"}</button>
           <button type="button" id="refresh-button" class="bm-primary" ${isScanningStatus ? "disabled" : ""}>${isScanningStatus ? "Loading..." : "Refresh now"}</button>
           <button type="button" id="winner-refresh-button" ${isScanningWinner ? "disabled" : ""}>${isScanningWinner ? "Loading winner..." : "Refresh winner reports"}</button>
           <button type="button" id="bm-theme">${darkMode ? "Light mode" : "Dark mode"}</button>
@@ -1348,6 +1359,11 @@
     shadow.getElementById("night-toggle-button")?.addEventListener("click", () => {
       ignoreNightOnly = !ignoreNightOnly;
       localStorage.setItem(NIGHT_FILTER_STORAGE_KEY, ignoreNightOnly ? "1" : "0");
+      render(currentPayload);
+    });
+    shadow.getElementById("hide-clear-button")?.addEventListener("click", () => {
+      hideClearClients = !hideClearClients;
+      localStorage.setItem(HIDE_CLEAR_STORAGE_KEY, hideClearClients ? "1" : "0");
       render(currentPayload);
     });
     shadow.getElementById("completed-reports-toggle")?.addEventListener("click", () => {
