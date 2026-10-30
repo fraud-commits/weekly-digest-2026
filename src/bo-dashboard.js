@@ -1306,11 +1306,11 @@
               ${mailingClients.slice(0, 8).map((client) => {
                 const tabs = (client.tabs || []).filter((tab) => (Number(tab.count) || 0) > 0);
                 return `
-                  <div class="list-item mailing-item">
+                  <div class="list-item mailing-item" style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;">
                     ${renderQueueClientPill(client.client || "Client")}
-                    <div class="list-item-body">
-                      <div class="list-item-title">${escapeHtml(client.client || "Client")}</div>
-                      <div class="queue-extra">
+                    <div class="list-item-body" style="display:grid;gap:4px;min-width:0;justify-items:start;">
+                      <div class="list-item-title" style="text-align:left;">${escapeHtml(client.client || "Client")}</div>
+                      <div class="queue-extra" style="margin-top:0;">
                         ${tabs.map((tab) => `<div class="queue-extra-chip">${escapeHtml(tab.label)} ${escapeHtml(tab.count)}</div>`).join("")}
                       </div>
                     </div>
