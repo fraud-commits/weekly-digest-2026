@@ -1796,6 +1796,22 @@
   color-scheme: dark;
 }
 .bm-topbar .bm-primary { background: #00987D; border-color: #00987D; color: #fff; }
+.bm-topbar .bm-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  display: grid;
+  gap: 5px;
+  min-width: 190px;
+  padding: 8px;
+  background: #043927;
+  border: 1px solid rgba(239, 255, 251, .2);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .3);
+}
+.bm-topbar .bm-menu[hidden] { display: none; }
+.bm-topbar .bm-menu button { width: 100%; text-align: left; }
 .bm-version { color: #7CE3C3; font-size: 11px; margin-left: 6px; }
 
 /* ---- density overrides (bookmarklet) ---- */

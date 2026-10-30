@@ -1119,11 +1119,16 @@
           <button type="button" id="today-button">Today</button>
           <button type="button" id="yesterday-button">Yesterday</button>
           <button type="button" id="apply-date-button">Apply date</button>
-          <button type="button" id="night-toggle-button">${ignoreNightOnly ? "Include night tabs" : "Hide night tabs"}</button>
-          <button type="button" id="hide-clear-button">${hideClearClients ? "Show clear clients" : "Hide clear clients"}</button>
           <button type="button" id="refresh-button" class="bm-primary" ${isScanningStatus ? "disabled" : ""}>${isScanningStatus ? "Loading..." : "Refresh now"}</button>
-          <button type="button" id="winner-refresh-button" ${isScanningWinner ? "disabled" : ""}>${isScanningWinner ? "Loading winner..." : "Refresh winner reports"}</button>
-          <button type="button" id="bm-theme">${darkMode ? "Light mode" : "Dark mode"}</button>
+          <div style="position:relative;">
+            <button type="button" id="bm-settings" title="Settings">⋯</button>
+            <div class="bm-menu" id="bm-menu" hidden>
+              <button type="button" id="winner-refresh-button" ${isScanningWinner ? "disabled" : ""}>${isScanningWinner ? "Loading winner..." : "Refresh winner reports"}</button>
+              <button type="button" id="night-toggle-button">${ignoreNightOnly ? "Include night tabs" : "Hide night tabs"}</button>
+              <button type="button" id="hide-clear-button">${hideClearClients ? "Show clear clients" : "Hide clear clients"}</button>
+              <button type="button" id="bm-theme">${darkMode ? "Light mode" : "Dark mode"}</button>
+            </div>
+          </div>
           <button type="button" id="bm-minimize">Minimize</button>
           <button type="button" id="bm-close">Close</button>
         </div>
@@ -1329,6 +1334,13 @@
       darkMode = !darkMode;
       localStorage.setItem(THEME_STORAGE_KEY, darkMode ? "dark" : "light");
       render(currentPayload);
+    });
+    shadow.getElementById("bm-settings")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const menu = shadow.getElementById("bm-menu");
+      if (menu) {
+        menu.hidden = !menu.hidden;
+      }
     });
 
     shadow.getElementById("bm-minimize")?.addEventListener("click", () => {
