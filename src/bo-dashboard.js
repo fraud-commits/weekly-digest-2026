@@ -1099,6 +1099,7 @@
     }
 
     host.style.background = darkMode ? DARK_BG : LIGHT_BG;
+    host.style.color = darkMode ? "#EFFFFB" : "#111827";
     shadow.innerHTML = `<style>${DASHBOARD_CSS}</style>
       <div class="bm-page" data-theme="${darkMode ? "dark" : "light"}">
       <div class="bm-topbar">
@@ -1117,20 +1118,7 @@
         </div>
       </div>
       <div class="app">
-        <section class="hero">
-          <div class="hero-top">
-            <div class="pill" style="background:rgba(255,255,255,0.16); color:#fff; border:1px solid rgba(255,255,255,0.18);">Worker session active</div>
-            <div class="status-badge">BO Checklist ${escapeHtml(VERSION)}</div>
-          </div>
-
-          <div class="hero-main">
-            <div class="hero-copy">
-              <h2>One screen. All unchecked.</h2>
-            </div>
-          </div>
-
-          ${warnings}
-        </section>
+        ${warnings}
 
         <section class="summary-grid">
           <article class="summary-card">
