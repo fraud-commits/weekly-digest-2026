@@ -1462,20 +1462,8 @@
 
           await boFetch(`/ajax.php?q=core/userTeamSelect&type=lfs&val=${encodeURIComponent(clientRef.id)}`);
           await sleep(400);
-          let toCheckHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
-          let clientResult = collectClient(clientRef, toCheckHtml);
-          if (!clientResult.total) {
-            // BO may still be settling right after the team switch - poll once more before accepting a zero.
-            await sleep(900);
-            const retryHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
-            const retryResult = collectClient(clientRef, retryHtml);
-            if (retryResult.total > 0) {
-              clientResult = retryResult;
-            } else {
-              warningsBatch = [...new Set([...warningsBatch, `Statuses: ${clientRef.client} still 0 after retry`])];
-            }
-          }
-          results.push(clientResult);
+          const toCheckHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
+          results.push(collectClient(clientRef, toCheckHtml));
           await sleep(SCAN_STEP_DELAY_MS);
         }
 
