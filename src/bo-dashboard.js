@@ -1141,14 +1141,7 @@
           </div>
 
           <div class="toolbar">
-            <div class="hero-bottom">
-              <div class="chip">${escapeHtml(activeClients.length)} clients need review</div>
-              <div class="chip">${escapeHtml(idleClients.length)} clients are clear</div>
-              <div class="chip" id="last-update-chip">${escapeHtml(lastUpdatedText)}</div>
-              <div class="chip" id="winner-update-chip">${escapeHtml(winnerChipText)}</div>
-              <div class="chip" id="winner-next-chip">${escapeHtml(winnerNextText)}</div>
-            </div>
-            <div class="toolbar-right">
+            <div class="toolbar-right" style="margin-left:auto;">
               <div class="date-controls">
                 <input class="date-input" id="date-filter" type="date" value="${escapeHtml(selectedDateIso)}">
                 <div class="quick-date-actions">
