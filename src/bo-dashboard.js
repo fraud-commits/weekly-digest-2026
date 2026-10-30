@@ -1447,6 +1447,8 @@
             const retryResult = collectClient(clientRef, retryHtml);
             if (retryResult.total > 0) {
               clientResult = retryResult;
+            } else {
+              warningsBatch = [...new Set([...warningsBatch, `Statuses: ${clientRef.client} still 0 after retry`])];
             }
           }
           results.push(clientResult);
