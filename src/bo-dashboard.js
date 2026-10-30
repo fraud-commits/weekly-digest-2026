@@ -1076,82 +1076,96 @@
       });
     }
 
-    const tableWrap = mk("div", `padding:${fullscreen ? "0 24px 24px" : "0 14px 14px"};overflow:auto;`);
-    const table = mk(
-      "table",
-      `width:100%;border-collapse:collapse;font-size:${fullscreen ? 15 : 12.5}px;table-layout:${fullscreen ? "fixed" : "auto"};`,
-    );
-    const thead = mk("thead");
-    const headRow = mk("tr");
-    ["Client", "Total", "Winner", "Non-zero tabs"].forEach((title, columnIndex) => {
-      headRow.appendChild(
-        mk(
-          "th",
-          [
-            `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid ${t.lineSoft};font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:${t.inkSoft};background:${t.tableHeadBg};`,
-            fullscreen ? `width:${["18%", "7%", "7%", "68%"][columnIndex]};` : "",
-          ].join(""),
-          escapeHtml(title),
-        ),
-      );
-    });
-    thead.appendChild(headRow);
-    table.appendChild(thead);
-
-    const tbody = mk("tbody");
     const workClients = clients.filter(
       (client) =>
         client.total > 0 || (Number(client.winnerReports) || 0) > 0 || (Number(client.quickReports) || 0) > 0,
     );
+
+    const cardsWrap = mk(
+      "div",
+      fullscreen
+        ? "display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding:0 24px 24px;"
+        : "display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;padding:0 14px 14px;",
+    );
     if (!workClients.length) {
-      const emptyRow = mk("tr");
-      emptyRow.appendChild(
+      cardsWrap.appendChild(
         mk(
-          "td",
-          `text-align:center;color:${t.inkFaint};padding:18px;`,
+          "div",
+          `grid-column:1/-1;padding:18px;border:1px dashed ${t.line};border-radius:12px;text-align:center;color:${t.inkFaint};`,
           "All clear — no clients with pending work.",
         ),
       );
-      emptyRow.firstChild.colSpan = 4;
-      tbody.appendChild(emptyRow);
     }
+
+    const pill = (label, value, muted) =>
+      `<span style="display:inline-flex;align-items:center;gap:5px;padding:${fullscreen ? "5px 11px" : "4px 9px"};border-radius:999px;font-size:${fullscreen ? 12 : 11}px;font-weight:800;letter-spacing:.04em;background:${muted ? t.chipFill : t.fill};border:1px solid ${muted ? t.chipLine : t.lineSoft};color:${muted ? t.inkFaint : t.inkSoft};text-transform:uppercase;">${escapeHtml(label)} ${escapeHtml(value)}</span>`;
+
     workClients.forEach((client) => {
-      const row = mk("tr");
-      const cellCss = `text-align:left;padding:${fullscreen ? "12px 14px" : "8px 10px"};border-bottom:1px solid ${t.lineSoft};vertical-align:top;`;
       const [clientFill, clientInk] = clientColor(client.client);
-      const clientCell = mk("td", cellCss);
-      clientCell.appendChild(
+      const winnerDone = typeof client.winnerReportsCompleted === "number" ? client.winnerReportsCompleted : null;
+      const reportsTotal = typeof client.quickReportsTotal === "number" ? client.quickReportsTotal : null;
+
+      const card = mk(
+        "div",
+        [
+          `background:${t.surfaceRaised}`,
+          `border:1px solid ${t.lineSoft}`,
+          `border-top:4px solid ${clientInk}`,
+          "border-radius:14px",
+          `padding:${fullscreen ? "14px 16px" : "11px 13px"}`,
+          "display:grid",
+          "gap:9px",
+          fullscreen ? `box-shadow:${t.shadow}` : "",
+        ]
+          .filter(Boolean)
+          .join(";"),
+      );
+
+      const headLine = mk("div", "display:flex;align-items:center;justify-content:space-between;gap:10px;");
+      headLine.appendChild(
         mk(
-          "span",
-          `display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:${clientFill};color:${clientInk};border:1px solid ${clientInk}55;font-weight:700;`,
-          escapeHtml(client.client),
+          "div",
+          "display:grid;gap:1px;",
+          `<span style="font-size:10px;font-weight:800;letter-spacing:.12em;color:${t.inkFaint};text-transform:uppercase;">Client</span>` +
+            `<span style="font-size:${fullscreen ? 18 : 15.5}px;font-weight:800;color:${clientInk};">${escapeHtml(client.client)}</span>`,
         ),
       );
-      row.appendChild(clientCell);
-      row.appendChild(
+      const circleBadge = (label, value, fill, ink) =>
+        `<span style="min-width:${fullscreen ? 30 : 26}px;height:${fullscreen ? 30 : 26}px;padding:0 7px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;gap:3px;font-size:${fullscreen ? 12.5 : 11.5}px;font-weight:800;background:${fill};color:${ink};border:1px solid ${ink}44;">${label} ${escapeHtml(value)}</span>`;
+      headLine.appendChild(
         mk(
-          "td",
-          `${cellCss}font-weight:800;font-size:${fullscreen ? 17 : 15}px;color:${client.total > 0 ? t.hot : t.zero};`,
-          escapeHtml(client.total),
+          "div",
+          "display:flex;align-items:center;gap:5px;",
+          `<span style="min-width:${fullscreen ? 30 : 26}px;height:${fullscreen ? 30 : 26}px;padding:0 7px;border-radius:${fullscreen ? 15 : 13}px;display:inline-flex;align-items:center;justify-content:center;font-size:${fullscreen ? 13.5 : 12.5}px;font-weight:800;background:${client.total > 0 ? clientInk : t.chipFill};color:${client.total > 0 ? "#fff" : t.inkFaint};border:1px solid ${client.total > 0 ? clientInk : t.chipLine};">${escapeHtml(client.total)}</span>` +
+            `<span style="min-width:${fullscreen ? 30 : 26}px;height:${fullscreen ? 30 : 26}px;padding:0 8px;border-radius:${fullscreen ? 15 : 13}px;display:inline-flex;align-items:center;justify-content:center;font-size:${fullscreen ? 12.5 : 11.5}px;font-weight:800;background:${t.quickFill};color:${t.hot};border:1px solid ${t.quickLine};">q ${escapeHtml(client.quickReports ?? 0)}</span>` +
+            `<span style="min-width:${fullscreen ? 30 : 26}px;height:${fullscreen ? 30 : 26}px;padding:0 8px;border-radius:${fullscreen ? 15 : 13}px;display:inline-flex;align-items:center;justify-content:center;font-size:${fullscreen ? 12.5 : 11.5}px;font-weight:800;background:${t.warnFill};color:${t.warnInk};border:1px solid ${t.warnLine};">w ${escapeHtml(client.winnerReports ?? 0)}</span>`,
         ),
       );
-      row.appendChild(
+      card.appendChild(headLine);
+
+      const pillsLine = mk("div", "display:flex;align-items:center;gap:5px;flex-wrap:wrap;");
+      pillsLine.innerHTML =
+        pill("Open tabs", client.total, client.total === 0) +
+        pill("Winner done", winnerDone === null ? "–" : winnerDone, winnerDone === null) +
+        pill("Reports total", reportsTotal === null ? "–" : reportsTotal, reportsTotal === null);
+      card.appendChild(pillsLine);
+
+      const winnerPending = (Number(client.winnerReports) || 0) + (Number(client.quickReports) || 0);
+      card.appendChild(
         mk(
-          "td",
-          `${cellCss}font-weight:${Number.isInteger(client.winnerReports) ? 800 : 400};font-size:${fullscreen ? 17 : 15}px;color:${client.winnerReports > 0 ? t.hot : t.zero};`,
-          escapeHtml(client.winnerReports ?? "—"),
+          "div",
+          `display:flex;align-items:center;justify-content:space-between;gap:8px;padding:${fullscreen ? "7px 11px" : "6px 10px"};border-radius:10px;font-size:${fullscreen ? 12.5 : 11.5}px;font-weight:600;${
+            winnerPending > 0
+              ? `;background:${t.quickFill};border:1px solid ${t.quickLine};color:${t.hot}`
+              : `;background:${t.chipFill};color:${t.inkFaint}`
+          };`,
+          winnerPending > 0 ? `Top winners &amp; quick: ${winnerPending} pending` : "No unchecked items in the latest BO refresh.",
         ),
       );
-      const tabsCell = mk("td", cellCss);
-      (client.nonZero || []).forEach((item) => {
-        addChip(tabsCell, item.label, item.count, item.type === "quickReports");
-      });
-      row.appendChild(tabsCell);
-      tbody.appendChild(row);
+
+      cardsWrap.appendChild(card);
     });
-    table.appendChild(tbody);
-    tableWrap.appendChild(table);
-    root.appendChild(tableWrap);
+    root.appendChild(cardsWrap);
 
     const reportQueue = (data?.reportQueue || []).filter((item) => !isQuickReport(item));
     const quickQueue = (data?.reportQueue || []).filter(isQuickReport);
