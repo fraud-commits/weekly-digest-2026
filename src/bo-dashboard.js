@@ -1200,28 +1200,48 @@
 
         items.slice(0, fullscreen ? 40 : 12).forEach((item) => {
           const [clientFill, clientInk] = clientColor(item.client);
-          const [ageFill, ageInk] = isQuickReport(item) || isCompleted ? ["transparent", t.inkSoft] : ageColor(item.lastBetHours);
+          const [, ageInk] = isQuickReport(item) || isCompleted ? ["transparent", clientInk] : ageColor(item.lastBetHours);
+
           const line = mk(
             "div",
-            `display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:4px;background:${t.surfaceRaised};border:1px solid ${t.chipLine};font-size:12px;`,
+            `display:flex;align-items:center;justify-content:space-between;gap:10px;padding:${fullscreen ? "8px 10px" : "7px 9px"};border-radius:10px;margin-bottom:5px;background:${t.surfaceRaised};border:1px solid ${t.chipLine};`,
           );
-          line.appendChild(
+
+          const left = mk("div", "display:flex;align-items:center;gap:9px;min-width:0;flex:1;");
+          left.appendChild(
             mk(
-              "div",
-              "display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;",
-              `<span style="background:${clientFill};color:${clientInk};border:1px solid ${clientInk}55;display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;">${escapeHtml(item.client)}</span>` +
-                `<span style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.playerId)}</span>` +
-                (!isCompleted && item.lastBetHours > 3 ? `<span style="color:${ageInk};font-size:10px;font-weight:700;">overdue</span>` : ""),
+              "span",
+              `flex:0 0 auto;background:${clientFill};color:${clientInk};border:1px solid ${clientInk}55;display:inline-block;padding:3px 9px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;`,
+              escapeHtml(item.client),
             ),
           );
+          const infoBits = [`<span style="font-weight:800;font-size:${fullscreen ? 13.5 : 12.5}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.playerId)}</span>`];
+          const detailChips = [];
+          if (item.netWinningsText) {
+            detailChips.push(`Today win <b>${escapeHtml(item.netWinningsText)}</b>`);
+          }
+          if (item.aggregatedText) {
+            detailChips.push(`Agg <b>${escapeHtml(item.aggregatedText)}</b>`);
+          }
+          if (!isCompleted && item.lastBetHours > 3) {
+            detailChips.push(`<b style="color:${ageInk};">overdue</b>`);
+          }
+          if (detailChips.length) {
+            infoBits.push(
+              `<span style="display:flex;gap:4px;flex-wrap:wrap;font-size:10.5px;color:${t.inkSoft};background:${t.chipFill};border:1px solid ${t.chipLine};border-radius:999px;padding:2px 8px;\">${detailChips.join(" · ")}</span>`,
+            );
+          }
+          left.appendChild(mk("div", "display:grid;gap:3px;min-width:0;", infoBits.join("")));
+          line.appendChild(left);
+
+          const timeHtml = isCompleted
+            ? escapeHtml(item.pdfName || "PDF ready")
+            : escapeHtml(item.lastBetText || "Time unknown");
           line.appendChild(
             mk(
               "div",
-              `color:${t.inkSoft};font-size:11px;white-space:nowrap;display:flex;align-items:center;gap:5px;`,
-              isCompleted
-                ? escapeHtml(item.pdfName || "PDF ready")
-                : `<span style="${ageFill === "transparent" ? "" : `background:${ageFill};color:${ageInk};`}padding:3px 7px;border-radius:999px;">${escapeHtml(item.lastBetText || "Time unknown")}</span>` +
-                  `${item.netWinningsText || item.aggregatedText ? `<span>${escapeHtml([item.netWinningsText, item.aggregatedText].filter(Boolean).join(" · "))}</span>` : ""}`,
+              `flex:0 0 auto;font-weight:800;font-size:${fullscreen ? 13.5 : 12.5}px;color:${ageInk};white-space:nowrap;`,
+              timeHtml,
             ),
           );
           card.appendChild(line);
