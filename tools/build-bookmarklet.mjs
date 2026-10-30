@@ -40,8 +40,7 @@ if (code.includes("__DASHBOARD_CSS_JSON__")) {
 new vm.Script(code);
 
 const bookmarklet = "javascript:" + encodeURIComponent(code);
-const hostedScriptUrl = `${HOSTED_BASE_URL}/bo-dashboard.js?v=${version}`;
-const loader = `javascript:(function(){var s=document.createElement('script');s.src=${JSON.stringify(hostedScriptUrl)};document.body.appendChild(s);}());`;
+const loader = `javascript:(function(){var s=document.createElement('script');s.src=${JSON.stringify(`${HOSTED_BASE_URL}/bo-dashboard.js`)}+'?t='+Date.now();document.body.appendChild(s);}());`;
 
 const landing = `<!DOCTYPE html>
 <html lang="en">

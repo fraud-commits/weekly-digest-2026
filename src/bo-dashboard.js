@@ -1028,10 +1028,13 @@
     const pendingPlayers = (payload?.reportQueue || []).length;
 
     if (minimized) {
+      const uncheckedTotal = (payload?.clients || []).reduce((sum, client) => sum + (Number(client.total) || 0), 0);
+      const pendingLabel = payload?.winnerReportsSnapshotDate ? String(pendingPlayers) : "…";
       shadow.innerHTML = `<style>${DASHBOARD_CSS}</style>
         <div class="bm-mini" id="bm-mini">
           BO Checklist<span class="bm-version">${escapeHtml(VERSION)}</span>
-          <span class="bm-mini-note">Pending players:</span><b>${escapeHtml(pendingPlayers)}</b>
+          <span class="bm-mini-note">Unchecked:</span><b>${escapeHtml(uncheckedTotal)}</b>
+          <span class="bm-mini-note">Pending players:</span><b>${escapeHtml(pendingLabel)}</b>
           <span class="bm-mini-note">Click to open</span>
         </div>`;
       shadow.getElementById("bm-mini").addEventListener("click", () => {

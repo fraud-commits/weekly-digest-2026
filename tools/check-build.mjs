@@ -26,7 +26,7 @@ for (const marker of ['bo-checklist-dashboard', 'userTeamSelect', 'toCheck/index
 }
 
 assert.ok(loader.startsWith('javascript:'), 'loader must use the javascript: scheme');
-assert.ok(loader.includes('bo-dashboard.js?v='), 'loader must point at the hosted script with a version');
+assert.ok(loader.includes("bo-dashboard.js") && loader.includes("Date.now()"), 'loader must point at the hosted script with a cache buster');
 assert.ok(loader.length < 400, `loader must stay tiny (got ${loader.length} chars)`);
 
 assert.ok(landing.includes('<script id="bm-code" type="text/plain">'), 'landing must embed the static bookmarklet code');
