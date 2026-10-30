@@ -1053,8 +1053,7 @@
         (client) =>
           !hideClearClients ||
           client.total > 0 ||
-          (Number(client.winnerReports) || 0) > 0 ||
-          (Number(client.quickReports) || 0) > 0,
+          (Number(client.winnerReports) || 0) > 0,
       );
     const activeClients = clients.filter((client) => client.total > 0);
     const idleClients = clients.filter((client) => client.total === 0);
