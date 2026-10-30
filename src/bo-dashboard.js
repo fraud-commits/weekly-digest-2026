@@ -1309,37 +1309,6 @@
               ${mailingClients.length > 8 ? `<div class="list-item"><div class="hero-copy"><div class="list-item-title">More clients</div><div class="list-item-meta">${escapeHtml(mailingClients.length - 8)} more with mailing badges.</div></div><div class="list-item-count">+</div></div>` : ""}
             </div>
           </article>
-
-          <article class="panel">
-            <h3>Backlog ranking</h3>
-            <div class="list">
-              ${activeClients.slice(0, 6).map((client, index) => `
-                <div class="list-item">
-                  <div class="index-badge">${index + 1}</div>
-                  <div class="hero-copy">
-                    <div class="list-item-title">${escapeHtml(client.client)}</div>
-                    <div class="list-item-meta">${escapeHtml(client.nonZero.map((item) => `${item.label} ${item.count}`).join(" | "))}</div>
-                  </div>
-                  <div class="list-item-count">${escapeHtml(client.total)}</div>
-                </div>
-              `).join("") || `<div class="list-item"><div class="hero-copy"><div class="list-item-title">Nothing unchecked</div><div class="list-item-meta">All visible clients are currently clear.</div></div><div class="list-item-count">0</div></div>`}
-            </div>
-          </article>
-
-          <article class="panel">
-            <h3>Biggest hotspots</h3>
-            <div class="list">
-              ${hotspots.map((item) => `
-                <div class="list-item hotspot">
-                  <div class="hero-copy">
-                    <div class="list-item-title">${escapeHtml(item.label)}</div>
-                    <div class="list-item-meta">${escapeHtml(item.clients.join(", "))}</div>
-                  </div>
-                  <div class="list-item-count">${escapeHtml(item.count)}</div>
-                </div>
-              `).join("") || `<div class="list-item hotspot"><div class="hero-copy"><div class="list-item-title">No hotspots</div><div class="list-item-meta">No active checklist pressure in the current BO snapshot.</div></div><div class="list-item-count">0</div></div>`}
-            </div>
-          </article>
         </section>
 
         <section class="footer-note">
