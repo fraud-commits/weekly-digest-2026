@@ -977,6 +977,7 @@
     const clientsWithBacklog = clients.filter((client) => client.total > 0).length;
     const largest = [...clients].sort((a, b) => b.total - a.total)[0] || null;
     const winnerLeft = clients.reduce((sum, client) => sum + (Number(client.winnerReports) || 0), 0);
+    const pendingPlayers = (data?.reportQueue || []).length;
     const minimized = root.dataset.minimized === "1";
 
     root.innerHTML = "";
@@ -989,7 +990,7 @@
       mk(
         "div",
         `font-weight:800;letter-spacing:-.01em;color:${t.headInk};`,
-        `BO Checklist <span style="color:${t.accent};font-size:11px;margin-left:6px;font-weight:700;">${escapeHtml(VERSION)}</span>`,
+        `BO Checklist <span style="color:${t.accent};font-size:11px;margin-left:6px;font-weight:700;">${escapeHtml(VERSION)}</span>${minimized ? `<span style="color:${t.headInk};font-size:12px;margin-left:16px;font-weight:700;">Pending players: ${escapeHtml(pendingPlayers)}</span>` : ""}`,
       ),
     );
 
@@ -1019,7 +1020,7 @@
       }),
     );
     tools.appendChild(
-      mkBtn(minimized ? "Show" : "Hide", () => {
+      mkBtn(minimized ? "Show" : "Minimize", () => {
         root.dataset.minimized = minimized ? "0" : "1";
         render(currentPayload);
       }),
