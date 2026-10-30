@@ -1130,7 +1130,9 @@
           "div",
           "display:flex;align-items:center;gap:4px;",
           `<span style="min-width:24px;height:24px;padding:0 6px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:${client.total > 0 ? clientInk : t.chipFill};color:${client.total > 0 ? "#fff" : t.inkFaint};border:1px solid ${client.total > 0 ? clientInk : t.chipLine};">${escapeHtml(client.total)}</span>` +
-            `<span style="min-width:24px;height:24px;padding:0 7px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:${t.quickFill};color:${t.hot};border:1px solid ${t.quickLine};">q ${escapeHtml(client.quickReports ?? 0)}</span>` +
+            (clientSupportsQuick(client.client)
+              ? `<span style="min-width:24px;height:24px;padding:0 7px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:${t.quickFill};color:${t.hot};border:1px solid ${t.quickLine};">q ${escapeHtml(client.quickReports ?? 0)}</span>`
+              : "") +
             `<span style="min-width:24px;height:24px;padding:0 7px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:${t.warnFill};color:${t.warnInk};border:1px solid ${t.warnLine};">w ${escapeHtml(client.winnerReports ?? 0)}</span>`,
         ),
       );
@@ -1213,10 +1215,10 @@
           );
           const infoBits = [`<span style="font-weight:800;font-size:${fullscreen ? 13.5 : 12.5}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.playerId)}</span>`];
           const detailChips = [];
-          if (item.netWinningsText) {
+          if (!isCompleted && item.netWinningsText) {
             detailChips.push(`Today win <b>${escapeHtml(item.netWinningsText)}</b>`);
           }
-          if (item.aggregatedText) {
+          if (!isCompleted && item.aggregatedText) {
             detailChips.push(`Agg <b>${escapeHtml(item.aggregatedText)}</b>`);
           }
           if (!isCompleted && item.lastBetHours > 3) {
@@ -1236,7 +1238,9 @@
           line.appendChild(
             mk(
               "div",
-              `flex:0 0 auto;font-weight:800;font-size:${fullscreen ? 13.5 : 12.5}px;color:${ageInk};white-space:nowrap;`,
+              isCompleted
+                ? `flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:10.5px;color:${t.inkSoft};`
+                : `flex:0 0 auto;font-weight:800;font-size:${fullscreen ? 13.5 : 12.5}px;color:${ageInk};white-space:nowrap;`,
               timeHtml,
             ),
           );
@@ -1301,6 +1305,10 @@
 
   function trimDetail(lastBetText, netWinningsText, aggregatedText) {
     return [lastBetText, netWinningsText, aggregatedText].filter(Boolean).join(" · ").slice(0, 60) || "—";
+  }
+
+  function clientSupportsQuick(clientName = "") {
+    return /mac88|royal\s*gaming/i.test(String(clientName));
   }
 
   function clientColor(clientName = "") {
@@ -1429,8 +1437,19 @@
           render(mergePayload(), { progressLine: `${statusLine} — ${clientRef.client}` });
 
           await boFetch(`/ajax.php?q=core/userTeamSelect&type=lfs&val=${encodeURIComponent(clientRef.id)}`);
-          const toCheckHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
-          results.push(collectClient(clientRef, toCheckHtml));
+          await sleep(400);
+          let toCheckHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
+          let clientResult = collectClient(clientRef, toCheckHtml);
+          if (!clientResult.total) {
+            // BO may still be settling right after the team switch - poll once more before accepting a zero.
+            await sleep(900);
+            const retryHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
+            const retryResult = collectClient(clientRef, retryHtml);
+            if (retryResult.total > 0) {
+              clientResult = retryResult;
+            }
+          }
+          results.push(clientResult);
           await sleep(SCAN_STEP_DELAY_MS);
         }
 
