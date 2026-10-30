@@ -1076,10 +1076,7 @@
       });
     }
 
-    const workClients = clients.filter(
-      (client) =>
-        client.total > 0 || (Number(client.winnerReports) || 0) > 0 || (Number(client.quickReports) || 0) > 0,
-    );
+    const workClients = [...clients].sort((a, b) => b.total - a.total || a.client.localeCompare(b.client));
 
     const cardsWrap = mk(
       "div",
@@ -1099,18 +1096,22 @@
 
     workClients.forEach((client) => {
       const [clientFill, clientInk] = clientColor(client.client);
+      const isZero =
+        !client.total && !(Number(client.winnerReports) > 0) && !(Number(client.quickReports) > 0);
+      const nameInk = isZero ? t.inkFaint : clientInk;
 
       const card = mk(
         "div",
         [
           `background:${t.surfaceRaised}`,
           `border:1px solid ${t.lineSoft}`,
-          `border-top:3px solid ${clientInk}`,
+          `border-top:3px solid ${isZero ? t.lineSoft : clientInk}`,
           "border-radius:12px",
           `padding:${fullscreen ? "9px 12px" : "8px 11px"}`,
           "display:grid",
           "gap:7px",
-          fullscreen ? `box-shadow:${t.shadow}` : "",
+          isZero ? "opacity:.55" : "",
+          fullscreen && !isZero ? `box-shadow:${t.shadow}` : "",
         ]
           .filter(Boolean)
           .join(";"),
@@ -1122,7 +1123,7 @@
           "div",
           "display:grid;gap:1px;",
           `<span style="font-size:9px;font-weight:800;letter-spacing:.12em;color:${t.inkFaint};text-transform:uppercase;">Client</span>` +
-            `<span style="font-size:${fullscreen ? 15 : 14}px;font-weight:800;color:${clientInk};">${escapeHtml(client.client)}</span>`,
+            `<span style="font-size:${fullscreen ? 15 : 14}px;font-weight:800;color:${nameInk};">${escapeHtml(client.client)}</span>`,
         ),
       );
       headLine.appendChild(
