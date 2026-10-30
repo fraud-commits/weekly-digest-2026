@@ -134,7 +134,7 @@
       "overflow:auto",
       `background:${t.surface}`,
       `color:${t.ink}`,
-      'font:13px/1.45 "Segoe UI",system-ui,sans-serif',
+      'font:14px/1.5 "Segoe UI",system-ui,sans-serif',
       `border:1px solid ${t.line}`,
       "border-radius:16px",
       `box-shadow:${t.shadow}`,
@@ -948,7 +948,7 @@
       mk(
         "div",
         `background:${t.fill};border:1px solid ${t.lineSoft};border-radius:12px;padding:10px 12px;display:grid;gap:2px;`,
-        `<strong style="font-size:${fullscreen ? 26 : 18}px;">${escapeHtml(value)}</strong><span style="font-size:${fullscreen ? 13 : 11}px;color:${t.inkSoft};">${escapeHtml(label)}</span>`,
+        `<strong style="font-size:${fullscreen ? 36 : 28}px;font-weight:800;letter-spacing:-.02em;">${escapeHtml(value)}</strong><span style="font-size:${fullscreen ? 13 : 12}px;color:${t.inkSoft};font-weight:600;">${escapeHtml(label)}</span>`,
       ),
     );
   }
@@ -959,7 +959,7 @@
       mk(
         "span",
         [
-          `display:inline-block;margin:2px 4px 2px 0;padding:${fullscreen ? "5px 12px" : "3px 8px"};border-radius:999px;font-size:${fullscreen ? 12.5 : 11}px;`,
+          `display:inline-block;margin:2px 4px 2px 0;padding:${fullscreen ? "6px 13px" : "4px 10px"};border-radius:999px;font-size:${fullscreen ? 13.5 : 12.5}px;font-weight:600;`,
           isQuick
             ? `background:${t.quickFill};border:1px solid ${t.quickLine};`
             : `background:${t.chipFill};border:1px solid ${t.chipLine};`,
@@ -989,8 +989,8 @@
     head.appendChild(
       mk(
         "div",
-        `font-weight:800;letter-spacing:-.01em;color:${t.headInk};`,
-        `BO Checklist <span style="color:${t.accent};font-size:11px;margin-left:6px;font-weight:700;">${escapeHtml(VERSION)}</span>${minimized ? `<span style="color:${t.headInk};font-size:12px;margin-left:16px;font-weight:700;">Pending players: ${escapeHtml(pendingPlayers)}</span>` : ""}`,
+        `font-weight:800;font-size:${minimized ? 17 : 15}px;letter-spacing:-.01em;color:${t.headInk};`,
+        `BO Checklist <span style="color:${t.accent};font-size:12px;margin-left:6px;font-weight:700;">${escapeHtml(VERSION)}</span>${minimized ? `<span style="color:${t.headInk};font-size:15px;margin-left:18px;font-weight:600;">Pending players: <span style="font-size:24px;font-weight:800;margin-left:4px;">${escapeHtml(pendingPlayers)}</span></span>` : ""}`,
       ),
     );
 
@@ -1131,14 +1131,14 @@
       row.appendChild(
         mk(
           "td",
-          `${cellCss}font-weight:800;color:${client.total > 0 ? t.hot : t.zero};`,
+          `${cellCss}font-weight:800;font-size:${fullscreen ? 17 : 15}px;color:${client.total > 0 ? t.hot : t.zero};`,
           escapeHtml(client.total),
         ),
       );
       row.appendChild(
         mk(
           "td",
-          `${cellCss}font-weight:${Number.isInteger(client.winnerReports) ? 700 : 400};color:${client.winnerReports > 0 ? t.hot : t.zero};`,
+          `${cellCss}font-weight:${Number.isInteger(client.winnerReports) ? 800 : 400};font-size:${fullscreen ? 17 : 15}px;color:${client.winnerReports > 0 ? t.hot : t.zero};`,
           escapeHtml(client.winnerReports ?? "—"),
         ),
       );
