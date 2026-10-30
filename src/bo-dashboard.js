@@ -1268,19 +1268,20 @@
       mailingCard.appendChild(
         mk(
           "div",
-          `font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:${t.inkSoft};margin-bottom:8px;`,
+          `font-weight:800;font-size:${fullscreen ? 14 : 13}px;text-transform:uppercase;letter-spacing:.08em;color:${t.inkSoft};margin-bottom:10px;`,
           `Mailing check · ${escapeHtml(mailing.length)}`,
         ),
       );
       mailing.forEach((row) => {
+        const [clientFill, clientInk] = clientColor(row.client);
         const line = mk(
           "div",
-          `display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border-radius:8px;margin-bottom:4px;background:${t.surfaceRaised};border:1px solid ${t.chipLine};font-size:12px;`,
+          `display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:${fullscreen ? "9px 11px" : "8px 10px"};border-radius:10px;margin-bottom:6px;background:${t.surfaceRaised};border:1px solid ${t.chipLine};`,
         );
         line.appendChild(
           mk(
             "span",
-            `display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;background:${t.chipFill};border:1px solid ${t.chipLine};`,
+            `display:inline-block;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:${clientFill};color:${clientInk};border:1px solid ${clientInk}55;`,
             escapeHtml(row.client),
           ),
         );
@@ -1288,7 +1289,7 @@
           line.appendChild(
             mk(
               "span",
-              `display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;background:${t.quickFill};border:1px solid ${t.quickLine};`,
+              `display:inline-block;padding:4px 12px;border-radius:999px;font-size:${fullscreen ? 13 : 12}px;font-weight:700;background:${t.quickFill};color:${t.hot};border:1px solid ${t.quickLine};`,
               `${escapeHtml(tab.label)} ${escapeHtml(tab.count)}`,
             ),
           );
