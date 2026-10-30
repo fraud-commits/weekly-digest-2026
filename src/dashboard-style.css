@@ -1838,3 +1838,11 @@
 .bm-page[data-theme="dark"] .queue-extra-chip { color: rgba(239, 255, 251, .7); }
 .bm-page[data-theme="dark"] .panel h3 { color: var(--ink); }
 .bm-page[data-theme="dark"] .label { color: rgba(239, 255, 251, .55); }
+.bm-page[data-theme="dark"] .client-total { background: rgba(214, 75, 109, .28); color: #ffd9e2; }
+.bm-page[data-theme="dark"] .winner-badge { background: rgba(213, 139, 29, .22); color: #f2c46d; }
+.bm-page[data-theme="dark"] .quick-badge { background: rgba(33, 118, 216, .25); color: #93c5fd; }
+.bm-page[data-theme="dark"] .list-item-count { background: rgba(214, 75, 109, .28); color: #ffd9e2; }
+.bm-page[data-theme="dark"] .list-item-count.priority-fresh { background: rgba(33, 118, 216, .25); color: #93c5fd; }
+.bm-page[data-theme="dark"] .list-item-count.priority-2h { background: rgba(213, 139, 29, .22); color: #f2c46d; }
+.bm-page[data-theme="dark"] .list-item-count.priority-3h { background: rgba(214, 75, 109, .3); color: #ffb3c4; }
+.bm-page[data-theme="dark"] .list-item.hotspot .list-item-count { background: rgba(33, 118, 216, .25); color: #93c5fd; }
