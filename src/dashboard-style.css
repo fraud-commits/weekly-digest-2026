@@ -1853,6 +1853,7 @@
 .bm-page[data-theme="dark"] .index-badge { background: rgba(106, 70, 242, .3); color: #c4b5fd; }
 .bm-page[data-theme="dark"] .queue-extra-chip { color: rgba(239, 255, 251, .7); }
 .bm-page[data-theme="dark"] .panel h3 { color: var(--ink); }
+.bm-page[data-theme="dark"] .client-refresh-button { background: rgba(239, 255, 251, .14); border-color: rgba(239, 255, 251, .2); color: #EFFFFB; box-shadow: none; }
 .bm-page[data-theme="dark"] .label { color: rgba(239, 255, 251, .55); }
 .bm-page[data-theme="dark"] .client-total { background: rgba(214, 75, 109, .28); color: #ffd9e2; }
 .bm-page[data-theme="dark"] .winner-badge { background: rgba(213, 139, 29, .22); color: #f2c46d; }
