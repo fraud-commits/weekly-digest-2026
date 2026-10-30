@@ -1,8 +1,8 @@
 /*!
  * BO Checklist Dashboard (bookmarklet build)
  * Runs inside an authenticated lfscbo.com page. No server, no extension.
- * Reuses the parsing flow of the local server build (overview only).
- * Rendering is fully inline-styled so page CSS, re-renders and CSP cannot hide it.
+ * Reuses the parsing flow of the local server build and renders the same
+ * dashboard UI as the local tool, inside a shadow-root overlay.
  */
 (function () {
   "use strict";
@@ -24,8 +24,8 @@
   const SCAN_STEP_DELAY_MS = 250;
   const NIGHT_ONLY_TYPES = new Set(["robotPlayers", "dealerPlayerMargin"]);
   const NIGHT_FILTER_STORAGE_KEY = "bo-checklist-ignore-night-only-v1";
-  const MODE_STORAGE_KEY = "bo-checklist-mode-v1";
-  const THEME_STORAGE_KEY = "bo-checklist-theme-v1";
+  const NOTIFICATIONS_STORAGE_KEY = "bo-request-notifications";
+  const COMPLETED_REPORTS_COLLAPSED_LIMIT = 5;
   const WINNER_WAIT_MS = 2000;
   const WINNER_CONFIRM_WAIT_MS = 1000;
   const WINNER_MAX_POLLING_ATTEMPTS = 8;
@@ -45,12 +45,16 @@
     window.clearTimeout(window[TIMER_FLAG]);
     window[TIMER_FLAG] = null;
   }
+  if (window[WINNER_TIMER_FLAG]) {
+    window.clearTimeout(window[WINNER_TIMER_FLAG]);
+    window[WINNER_TIMER_FLAG] = null;
+  }
   window[CLOSED_FLAG] = false;
 
   document.getElementById(PANEL_ID)?.remove();
-  document.getElementById(`${PANEL_ID}-style`)?.remove();
 
   const VERSION = "v1";
+  const DASHBOARD_CSS = __DASHBOARD_CSS_JSON__;
 
   let currentPayload = null;
   let isScanningStatus = false;
@@ -65,123 +69,30 @@
   let ticketingData = null;
   let userConsented = false;
   let ignoreNightOnly = localStorage.getItem(NIGHT_FILTER_STORAGE_KEY) === "1";
-  let fullscreen = localStorage.getItem(MODE_STORAGE_KEY) === "full";
-  let lightMode = localStorage.getItem(THEME_STORAGE_KEY) !== "dark";
   let originalClientId = null;
   let statusLine = "Ready. Press Scan.";
+  let selectedDateIso = getIsoDate();
+  let completedReportsExpanded = false;
+  let requestNotificationsEnabled = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY) === "1";
+  let lastRequestsTotal = null;
+  let minimized = false;
+  const statusProgress = { inProgress: false, processedClients: 0, totalClients: 0, currentClient: null, currentStage: null };
+  const winnerProgress = { inProgress: false, processedClients: 0, totalClients: 0, currentClient: null, currentStage: null };
+  const refreshingClientIds = new Set();
 
-  function theme() {
-    return lightMode
-      ? {
-          surface: "#FFFFFF",
-          surfaceRaised: "#FFFFFF",
-          ink: "#0A2A20",
-          inkSoft: "rgba(10,42,32,.65)",
-          inkFaint: "rgba(10,42,32,.35)",
-          line: "rgba(4,57,39,.10)",
-          lineSoft: "rgba(4,57,39,.06)",
-          fill: "rgba(4,57,39,.05)",
-          chipFill: "rgba(4,57,39,.06)",
-          chipLine: "rgba(4,57,39,.14)",
-          quickFill: "rgba(0,152,125,.15)",
-          quickLine: "rgba(0,152,125,.45)",
-          accent: "#00987D",
-          hot: "#00987D",
-          zero: "rgba(10,42,32,.35)",
-          warnFill: "rgba(214,75,109,.10)",
-          warnLine: "rgba(214,75,109,.35)",
-          warnInk: "#8A2A44",
-          headBg: "#043927",
-          headInk: "#EFFFFB",
-          tableHeadBg: "#D8F4EA",
-          shadow: "0 24px 60px rgba(4,57,39,.25)",
-        }
-      : {
-          surface: "#000E0B",
-          surfaceRaised: "#071914",
-          ink: "#EFFFFB",
-          inkSoft: "rgba(239,255,251,.78)",
-          inkFaint: "rgba(239,255,251,.46)",
-          line: "rgba(239,255,251,.14)",
-          lineSoft: "rgba(239,255,251,.09)",
-          fill: "#0B211B",
-          chipFill: "rgba(239,255,251,.08)",
-          chipLine: "rgba(239,255,251,.16)",
-          quickFill: "rgba(0,152,125,.25)",
-          quickLine: "rgba(0,152,125,.5)",
-          accent: "#00987D",
-          hot: "#7CE3C3",
-          zero: "rgba(239,255,251,.4)",
-          warnFill: "rgba(214,75,109,.18)",
-          warnLine: "rgba(214,75,109,.35)",
-          warnInk: "#ffd9e2",
-          headBg: "#000E0B",
-          headInk: "#EFFFFB",
-          tableHeadBg: "#041710",
-          shadow: "0 24px 60px rgba(0,0,0,.45)",
-        };
-  }
-
-  const CORNER_CSS = () => {
-    const t = theme();
-    return [
-      "position:fixed",
-      "right:16px",
-      "bottom:16px",
-      "z-index:2147483000",
-      "width:min(780px,94vw)",
-      "max-height:74vh",
-      "overflow:auto",
-      `background:${t.surface}`,
-      `color:${t.ink}`,
-      'font:14px/1.5 "Segoe UI",system-ui,sans-serif',
-      `border:1px solid ${t.line}`,
-      "border-radius:16px",
-      `box-shadow:${t.shadow}`,
-      "padding:0",
-      "margin:0",
-    ].join(";");
-  };
-  const FULL_CSS = () => {
-    const t = theme();
-    return [
-      "position:fixed",
-      "left:0",
-      "top:0",
-      "right:0",
-      "bottom:0",
-      "z-index:2147483000",
-      "width:100vw",
-      "max-height:100vh",
-      "overflow:auto",
-      `background:${t.surface}`,
-      `color:${t.ink}`,
-      'font:15px/1.5 "Segoe UI",system-ui,sans-serif',
-      "border:0",
-      "border-radius:0",
-      "box-shadow:none",
-      "padding:0",
-      "margin:0",
-    ].join(";");
-  };
-
-  function applyMode() {
-    root.style.cssText = fullscreen ? FULL_CSS() : CORNER_CSS();
-  }
-
-  document.addEventListener("keydown", (event) => {
-    if (fullscreen && event.key === "Escape") {
-      fullscreen = false;
-      localStorage.setItem(MODE_STORAGE_KEY, "corner");
-      applyMode();
-      render(currentPayload);
-    }
-  });
-
-  const root = document.createElement("div");
-  root.id = PANEL_ID;
-  applyMode();
-  document.body.appendChild(root);
+  const host = document.createElement("div");
+  host.id = PANEL_ID;
+  host.style.cssText = [
+    "position:fixed",
+    "inset:0",
+    "z-index:2147483000",
+    "overflow:auto",
+    "background:radial-gradient(circle at top left, rgba(10,163,108,.12), transparent 25%), radial-gradient(circle at top right, rgba(106,70,242,.16), transparent 28%), linear-gradient(180deg,#fbf7f0 0%, #f6f1e8 55%, #ece2cf 100%)",
+    'font-family:"Segoe UI","Trebuchet MS",sans-serif',
+    "color:#111827",
+  ].join(";");
+  const shadow = host.attachShadow({ mode: "open" });
+  document.body.appendChild(host);
 
   // Self-healing: if the host page re-renders and drops the panel, put it back.
   const heartbeat = window.setInterval(() => {
@@ -189,47 +100,10 @@
       window.clearInterval(heartbeat);
       return;
     }
-    if (!root.isConnected) {
-      document.body.appendChild(root);
+    if (!host.isConnected) {
+      document.body.appendChild(host);
     }
   }, 1500);
-
-  function mk(tag, cssText, html) {
-    const node = document.createElement(tag);
-    if (cssText) {
-      node.style.cssText = cssText;
-    }
-    if (html != null) {
-      node.innerHTML = html;
-    }
-    return node;
-  }
-
-  function mkBtn(label, onClick, disabled) {
-    const t = theme();
-    const button = mk(
-      "button",
-      [
-        `border:1px solid ${t.line}`,
-        "border-radius:10px",
-        "padding:7px 12px",
-        'font:700 12px/1 "Segoe UI",system-ui,sans-serif',
-        `color:${t.headInk}`,
-        `background:${t.fill}`,
-        "cursor:pointer",
-        disabled ? "opacity:.5" : "",
-      ]
-        .filter(Boolean)
-        .join(";"),
-      escapeHtml(label),
-    );
-    if (disabled) {
-      button.disabled = true;
-    } else {
-      button.addEventListener("click", onClick);
-    }
-    return button;
-  }
 
   function decodeHtml(input = "") {
     return input
@@ -942,410 +816,701 @@
     return { ...payload, clients: [...clients].sort((a, b) => b.total - a.total || a.client.localeCompare(b.client)) };
   }
 
-  function addStat(statsGrid, value, label) {
-    const t = theme();
-    statsGrid.appendChild(
-      mk(
-        "div",
-        `background:${t.fill};border:1px solid ${t.lineSoft};border-radius:12px;padding:10px 12px;display:grid;gap:2px;`,
-        `<strong style="font-size:${fullscreen ? 36 : 28}px;font-weight:800;letter-spacing:-.02em;">${escapeHtml(value)}</strong><span style="font-size:${fullscreen ? 13 : 12}px;color:${t.inkSoft};font-weight:600;">${escapeHtml(label)}</span>`,
-      ),
-    );
-  }
-
-  function addChip(cell, label, count, isQuick) {
-    const t = theme();
-    cell.appendChild(
-      mk(
-        "span",
-        [
-          `display:inline-block;margin:2px 4px 2px 0;padding:${fullscreen ? "6px 13px" : "4px 10px"};border-radius:999px;font-size:${fullscreen ? 13.5 : 12.5}px;font-weight:600;`,
-          isQuick
-            ? `background:${t.quickFill};border:1px solid ${t.quickLine};`
-            : `background:${t.chipFill};border:1px solid ${t.chipLine};`,
-        ].join(""),
-        `${escapeHtml(label)} ${escapeHtml(count)}`,
-      ),
-    );
-  }
-
-  function render(payload, extra = {}) {
-    const t = theme();
-    const data = payload ? applyNightOnlyFilter(payload) : null;
-    const clients = data?.clients || [];
-    const uncheckedCases = clients.reduce((sum, client) => sum + client.total, 0);
-    const clientsWithBacklog = clients.filter((client) => client.total > 0).length;
-    const largest = [...clients].sort((a, b) => b.total - a.total).find((client) => client.total > 0) || null;
-    const winnerLeft = clients.reduce((sum, client) => sum + (Number(client.winnerReports) || 0), 0);
-    const pendingPlayers = (data?.reportQueue || []).length;
-    const minimized = root.dataset.minimized === "1";
-
-    root.innerHTML = "";
-
-    const head = mk(
-      "div",
-      `display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid ${t.line};position:sticky;top:0;background:${t.headBg};z-index:2;`,
-    );
-    head.appendChild(
-      mk(
-        "div",
-        `font-weight:800;font-size:${minimized ? 17 : 15}px;letter-spacing:-.01em;color:${t.headInk};`,
-        `BO Checklist <span style="color:${t.accent};font-size:12px;margin-left:6px;font-weight:700;">${escapeHtml(VERSION)}</span>${minimized ? `<span style="color:${t.headInk};font-size:15px;margin-left:18px;font-weight:600;">Pending players: <span style="font-size:24px;font-weight:800;margin-left:4px;">${escapeHtml(pendingPlayers)}</span></span>` : ""}`,
-      ),
-    );
-
-    const tools = mk("div", "display:flex;gap:6px;");
-    tools.appendChild(
-      mkBtn(ignoreNightOnly ? "Include night tabs" : "Hide night tabs", () => {
-        ignoreNightOnly = !ignoreNightOnly;
-        localStorage.setItem(NIGHT_FILTER_STORAGE_KEY, ignoreNightOnly ? "1" : "0");
-        render(currentPayload);
-      }),
-    );
-    tools.appendChild(mkBtn(isScanningStatus || isScanningWinner ? "Scanning..." : "Scan", () => { runOverviewScan(); }, isScanningStatus || isScanningWinner));
-    tools.appendChild(
-      mkBtn(fullscreen ? "Exit full screen" : "Full screen", () => {
-        fullscreen = !fullscreen;
-        localStorage.setItem(MODE_STORAGE_KEY, fullscreen ? "full" : "corner");
-        applyMode();
-        render(currentPayload);
-      }),
-    );
-    tools.appendChild(
-      mkBtn(lightMode ? "Dark mode" : "Light mode", () => {
-        lightMode = !lightMode;
-        localStorage.setItem(THEME_STORAGE_KEY, lightMode ? "light" : "dark");
-        applyMode();
-        render(currentPayload);
-      }),
-    );
-    tools.appendChild(
-      mkBtn(minimized ? "Show" : "Minimize", () => {
-        root.dataset.minimized = minimized ? "0" : "1";
-        render(currentPayload);
-      }),
-    );
-    tools.appendChild(
-      mkBtn("Close", () => {
-        window[CLOSED_FLAG] = true;
-        window.clearInterval(heartbeat);
-        window.clearTimeout(window[TIMER_FLAG]);
-        window[TIMER_FLAG] = null;
-        window.clearTimeout(window[WINNER_TIMER_FLAG]);
-        window[WINNER_TIMER_FLAG] = null;
-        root.remove();
-      }),
-    );
-    head.appendChild(tools);
-    root.appendChild(head);
-
-    root.appendChild(
-      mk(
-        "div",
-        `padding:10px 14px;color:${t.inkSoft};border-bottom:1px solid ${t.lineSoft};`,
-        `${escapeHtml(extra.progressLine || statusLine)} · Statuses ${escapeHtml(formatStamp(data?.snapshotDate))}${data?.winnerReportsSnapshotDate ? ` · Winner ${escapeHtml(formatStamp(data.winnerReportsSnapshotDate))}` : ""}`,
-      ),
-    );
-
-    if (minimized) {
-      return;
-    }
-
-    const statsGrid = mk(
-      "div",
-      `display:grid;grid-template-columns:repeat(${fullscreen ? 5 : 4},1fr);gap:${fullscreen ? 10 : 8}px;padding:${fullscreen ? "20px 24px" : "12px 14px"};`,
-    );
-    addStat(statsGrid, uncheckedCases, "Unchecked total");
-    addStat(statsGrid, clientsWithBacklog, "Clients with work");
-    if (fullscreen) {
-      addStat(statsGrid, largest?.client || "—", "Largest backlog");
-    }
-    addStat(statsGrid, winnerLeft, "Winner reports left");
-    addStat(statsGrid, data?.ticketing?.requests ?? "—", "Ticketing requests");
-    root.appendChild(statsGrid);
-
-    if (data?.warnings?.length) {
-      data.warnings.forEach((line) => {
-        root.appendChild(
-          mk(
-            "div",
-            `margin:0 14px 10px;padding:10px 12px;border-radius:10px;background:${t.warnFill};border:1px solid ${t.warnLine};color:${t.warnInk};`,
-            escapeHtml(line),
-          ),
-        );
-      });
-    }
-
-    const workClients = [...clients].sort((a, b) => b.total - a.total || a.client.localeCompare(b.client));
-
-    const cardsWrap = mk(
-      "div",
-      fullscreen
-        ? "display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;padding:0 24px 24px;"
-        : "display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;padding:0 14px 14px;",
-    );
-    if (!workClients.length) {
-      cardsWrap.appendChild(
-        mk(
-          "div",
-          `grid-column:1/-1;padding:14px;border:1px dashed ${t.line};border-radius:12px;text-align:center;color:${t.inkFaint};`,
-          "All clear — no clients with pending work.",
-        ),
-      );
-    }
-
-    workClients.forEach((client) => {
-      const [clientFill, clientInk] = clientColor(client.client);
-      const isZero =
-        !client.total && !(Number(client.winnerReports) > 0) && !(Number(client.quickReports) > 0);
-      const nameInk = isZero ? t.inkFaint : clientInk;
-
-      const card = mk(
-        "div",
-        [
-          `background:${t.surfaceRaised}`,
-          `border:1px solid ${t.lineSoft}`,
-          `border-top:3px solid ${isZero ? t.lineSoft : clientInk}`,
-          "border-radius:12px",
-          `padding:${fullscreen ? "9px 12px" : "8px 11px"}`,
-          "display:grid",
-          "gap:7px",
-          isZero ? "opacity:.55" : "",
-          fullscreen && !isZero ? `box-shadow:${t.shadow}` : "",
-        ]
-          .filter(Boolean)
-          .join(";"),
-      );
-
-      const headLine = mk("div", "display:flex;align-items:center;justify-content:space-between;gap:8px;");
-      headLine.appendChild(
-        mk(
-          "div",
-          "display:grid;gap:1px;",
-          `<span style="font-size:9px;font-weight:800;letter-spacing:.12em;color:${t.inkFaint};text-transform:uppercase;">Client</span>` +
-            `<span style="font-size:${fullscreen ? 15 : 14}px;font-weight:800;color:${nameInk};">${escapeHtml(client.client)}</span>`,
-        ),
-      );
-      headLine.appendChild(
-        mk(
-          "div",
-          "display:flex;align-items:center;gap:4px;",
-          `<span style="min-width:24px;height:24px;padding:0 6px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:${client.total > 0 ? clientInk : t.chipFill};color:${client.total > 0 ? "#fff" : t.inkFaint};border:1px solid ${client.total > 0 ? clientInk : t.chipLine};">${escapeHtml(client.total)}</span>` +
-            (clientSupportsQuick(client.client)
-              ? `<span style="min-width:24px;height:24px;padding:0 7px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:${t.quickFill};color:${t.hot};border:1px solid ${t.quickLine};">q ${escapeHtml(client.quickReports ?? 0)}</span>`
-              : "") +
-            `<span style="min-width:24px;height:24px;padding:0 7px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:${t.warnFill};color:${t.warnInk};border:1px solid ${t.warnLine};">w ${escapeHtml(client.winnerReports ?? 0)}</span>`,
-        ),
-      );
-      card.appendChild(headLine);
-
-      const nonZeroTabs = client.nonZero || [];
-      if (nonZeroTabs.length) {
-        const tabsLine = mk(
-          "div",
-          `display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:10px;font-weight:700;color:${t.inkSoft};`,
-        );
-        tabsLine.innerHTML = nonZeroTabs
-          .map(
-            (tab) =>
-              `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:${t.fill};border:1px solid ${t.lineSoft};">${escapeHtml(tab.label)} <b style="color:${clientInk};">${escapeHtml(tab.count)}</b></span>`,
-          )
-          .join("");
-        card.appendChild(tabsLine);
-      } else {
-        card.appendChild(
-          mk(
-            "div",
-            `display:flex;align-items:center;padding:5px 9px;border-radius:10px;font-size:10.5px;font-weight:600;background:${t.chipFill};color:${t.inkFaint};`,
-            "No unchecked items in the latest BO refresh.",
-          ),
-        );
-      }
-
-      cardsWrap.appendChild(card);
-    });
-    root.appendChild(cardsWrap);
-
-    const reportQueue = (data?.reportQueue || []).filter((item) => !isQuickReport(item));
-    const quickQueue = (data?.reportQueue || []).filter(isQuickReport);
-    const completedQueue = data?.completedQueue || [];
-
-    if (reportQueue.length || quickQueue.length || completedQueue.length) {
-      const queuesWrap = mk(
-        "div",
-        fullscreen
-          ? "display:flex;gap:12px;padding:0 24px 24px;align-items:flex-start;"
-          : "padding:0 14px 14px;",
-      );
-
-      const buildQueueCard = (titleText, items, isCompleted) => {
-        const card = mk(
-          "div",
-          `flex:1;min-width:0;background:${t.fill};border:1px solid ${t.lineSoft};border-radius:12px;padding:12px;`,
-        );
-        card.appendChild(
-          mk(
-            "div",
-            `font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:${t.inkSoft};margin-bottom:8px;`,
-            `${escapeHtml(titleText)} · ${escapeHtml(items.length)}`,
-          ),
-        );
-
-        if (!items.length) {
-          card.appendChild(
-            mk("div", `color:${t.inkFaint};padding:8px 0;`, isCompleted ? "No completed reports yet." : "Queue is empty."),
-          );
-        }
-
-        items.slice(0, fullscreen ? 40 : 12).forEach((item) => {
-          const [clientFill, clientInk] = clientColor(item.client);
-          const [, ageInk] = isQuickReport(item) || isCompleted ? ["transparent", clientInk] : ageColor(item.lastBetHours);
-
-          const line = mk(
-            "div",
-            `display:flex;align-items:center;justify-content:space-between;gap:10px;padding:${fullscreen ? "8px 10px" : "7px 9px"};border-radius:10px;margin-bottom:5px;background:${t.surfaceRaised};border:1px solid ${t.chipLine};`,
-          );
-
-          const left = mk("div", "display:flex;align-items:center;gap:9px;min-width:0;flex:1;");
-          left.appendChild(
-            mk(
-              "span",
-              `flex:0 0 auto;background:${clientFill};color:${clientInk};border:1px solid ${clientInk}55;display:inline-block;padding:3px 9px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;`,
-              escapeHtml(item.client),
-            ),
-          );
-          const infoBits = [`<span style="font-weight:800;font-size:${fullscreen ? 13.5 : 12.5}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.playerId)}</span>`];
-          const detailChips = [];
-          if (!isCompleted && item.netWinningsText) {
-            detailChips.push(`Today win <b>${escapeHtml(item.netWinningsText)}</b>`);
-          }
-          if (!isCompleted && item.aggregatedText) {
-            detailChips.push(`Agg <b>${escapeHtml(item.aggregatedText)}</b>`);
-          }
-          if (!isCompleted && item.lastBetHours > 3) {
-            detailChips.push(`<b style="color:${ageInk};">overdue</b>`);
-          }
-          if (detailChips.length) {
-            infoBits.push(
-              `<span style="display:flex;gap:4px;flex-wrap:wrap;font-size:10.5px;color:${t.inkSoft};background:${t.chipFill};border:1px solid ${t.chipLine};border-radius:999px;padding:2px 8px;\">${detailChips.join(" · ")}</span>`,
-            );
-          }
-          left.appendChild(mk("div", "display:grid;gap:3px;min-width:0;", infoBits.join("")));
-          line.appendChild(left);
-
-          const timeHtml = isCompleted
-            ? escapeHtml(item.pdfName || "PDF ready")
-            : escapeHtml(item.lastBetText || "Time unknown");
-          line.appendChild(
-            mk(
-              "div",
-              isCompleted
-                ? `flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:10.5px;color:${t.inkSoft};`
-                : `flex:0 0 auto;font-weight:800;font-size:${fullscreen ? 13.5 : 12.5}px;color:${ageInk};white-space:nowrap;`,
-              timeHtml,
-            ),
-          );
-          card.appendChild(line);
-        });
-
-        return card;
-      };
-
-      queuesWrap.appendChild(buildQueueCard("Winner report queue", reportQueue, false));
-      queuesWrap.appendChild(buildQueueCard("Quick report queue", quickQueue, false));
-      queuesWrap.appendChild(buildQueueCard("Completed reports", completedQueue, true));
-
-      root.appendChild(queuesWrap);
-    }
-
-    const mailing = data?.mailing || [];
-    if (mailing.length) {
-      const mailingCard = mk(
-        "div",
-        fullscreen
-          ? `margin:0 24px 24px;background:${t.fill};border:1px solid ${t.lineSoft};border-radius:12px;padding:12px;`
-          : `margin:0 14px 14px;background:${t.fill};border:1px solid ${t.lineSoft};border-radius:12px;padding:12px;`,
-      );
-      mailingCard.appendChild(
-        mk(
-          "div",
-          `font-weight:800;font-size:${fullscreen ? 14 : 13}px;text-transform:uppercase;letter-spacing:.08em;color:${t.inkSoft};margin-bottom:10px;`,
-          `Mailing check · ${escapeHtml(mailing.length)}`,
-        ),
-      );
-      mailing.forEach((row) => {
-        const [clientFill, clientInk] = clientColor(row.client);
-        const line = mk(
-          "div",
-          `display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:${fullscreen ? "9px 11px" : "8px 10px"};border-radius:10px;margin-bottom:6px;background:${t.surfaceRaised};border:1px solid ${t.chipLine};`,
-        );
-        line.appendChild(
-          mk(
-            "span",
-            `display:inline-block;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:${clientFill};color:${clientInk};border:1px solid ${clientInk}55;`,
-            escapeHtml(row.client),
-          ),
-        );
-        row.tabs.forEach((tab) => {
-          line.appendChild(
-            mk(
-              "span",
-              `display:inline-block;padding:4px 12px;border-radius:999px;font-size:${fullscreen ? 13 : 12}px;font-weight:700;background:${t.quickFill};color:${t.hot};border:1px solid ${t.quickLine};`,
-              `${escapeHtml(tab.label)} ${escapeHtml(tab.count)}`,
-            ),
-          );
-        });
-        mailingCard.appendChild(line);
-      });
-      root.appendChild(mailingCard);
-    }
-  }
-
   function isQuickReport(item) {
     return item?.reportType === "quick";
-  }
-
-  function trimDetail(lastBetText, netWinningsText, aggregatedText) {
-    return [lastBetText, netWinningsText, aggregatedText].filter(Boolean).join(" · ").slice(0, 60) || "—";
   }
 
   function clientSupportsQuick(clientName = "") {
     return /mac88|royal\s*gaming/i.test(String(clientName));
   }
 
-  function clientColor(clientName = "") {
-    const key = String(clientName).trim().toLowerCase();
-    const colors = {
-      "mac88": ["rgba(50,124,240,.14)", "#2563eb"],
-      "iconic21": ["rgba(121,92,246,.14)", "#6d28d9"],
-      "digitain": ["rgba(228,116,142,.14)", "#c2416c"],
-      "enjoy gaming": ["rgba(41,185,121,.15)", "#15803d"],
-      "amazing gaming": ["rgba(245,158,11,.16)", "#d97706"],
-      "ballys": ["rgba(251,191,36,.18)", "#fbbf24"],
-      "mgasia": ["rgba(16,185,129,.16)", "#0f766e"],
-      "royal gaming": ["rgba(99,102,241,.14)", "#4338ca"],
-      "stakelogic": ["rgba(34,197,94,.14)", "#15803d"],
-      "onetouch": ["rgba(6,182,212,.14)", "#0f766e"],
-      "animo": ["rgba(100,116,139,.14)", "#475569"],
-      "live vegas": ["rgba(132,204,22,.18)", "#3f6212"],
+  function notifyRequests(data) {
+    const count = Number.isSafeInteger(data?.ticketing?.requests) ? data.ticketing.requests : null;
+    if (count === null) {
+      return;
+    }
+    if (
+      lastRequestsTotal !== null &&
+      count > lastRequestsTotal &&
+      requestNotificationsEnabled &&
+      "Notification" in window &&
+      Notification.permission === "granted"
+    ) {
+      try {
+        new Notification("BO Checklist", { body: `New ticketing requests: ${count}` });
+      } catch {
+        // notifications are best-effort
+      }
+    }
+    lastRequestsTotal = count;
+  }
+
+  function summariseHotspots(clients) {
+    const map = new Map();
+    clients.forEach((client) => {
+      client.nonZero.forEach((item) => {
+        const entry = map.get(item.label) || { label: item.label, count: 0, clients: [] };
+        entry.count += item.count;
+        entry.clients.push(client.client);
+        map.set(item.label, entry);
+      });
+    });
+    return [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)).slice(0, 6);
+  }
+
+  function formatLastUpdated(value) {
+    if (!value) {
+      return "No updates yet";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "Last update unknown";
+    }
+    return `Last update ${date.toLocaleDateString("en-GB")} ${date.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })}`;
+  }
+
+  function formatWinnerNextCheckText() {
+    if (!winnerSnapshotAt) {
+      return "Next auto winner check after first winner refresh";
+    }
+    const winnerTs = new Date(winnerSnapshotAt).getTime();
+    if (!Number.isFinite(winnerTs)) {
+      return "Next auto winner check unknown";
+    }
+    const remainingMs = Math.max(0, WINNER_REFRESH_MS - (Date.now() - winnerTs));
+    if (remainingMs <= 0) {
+      return "Winner auto-check due now";
+    }
+    const totalSeconds = Math.ceil(remainingMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const parts = [];
+    if (hours > 0) {
+      parts.push(`${hours}h`);
+    }
+    if (minutes > 0 || hours > 0) {
+      parts.push(`${minutes}m`);
+    }
+    parts.push(`${seconds}s`);
+    return `Next auto winner check in ${parts.join(" ")}`;
+  }
+
+  function formatReportAge(lastBetHours, fallbackText = "") {
+    if (typeof lastBetHours !== "number" || Number.isNaN(lastBetHours) || lastBetHours < 0) {
+      const rawText = String(fallbackText || "").trim();
+      if (rawText) {
+        const secondsMatch = rawText.match(/(\d+(?:[.,]\d+)?)\s*(?:sec(?:onds?)?|s)/i);
+        if (secondsMatch) {
+          return `${Math.max(1, Math.round(Number(secondsMatch[1].replace(",", "."))))} sec ago`;
+        }
+        const minutesMatch = rawText.match(/(\d+(?:[.,]\d+)?)\s*(?:min(?:utes?)?|m)/i);
+        if (minutesMatch) {
+          return `${Math.max(1, Math.round(Number(minutesMatch[1].replace(",", "."))))} min ago`;
+        }
+        const hoursMatch = rawText.match(/(\d+(?:[.,]\d+)?)\s*h/i);
+        if (hoursMatch) {
+          const totalMinutes = Math.round(Number(hoursMatch[1].replace(",", ".")) * 60);
+          if (totalMinutes < 60) {
+            return `${Math.max(1, totalMinutes)} min ago`;
+          }
+          const hours = Math.floor(totalMinutes / 60);
+          const minutes = totalMinutes % 60;
+          return minutes === 0 ? `${hours}h ago` : `${hours}h ${minutes}m ago`;
+        }
+      }
+      if (!rawText || rawText === "-" || rawText === "—") {
+        return "<1 min ago";
+      }
+      return rawText;
+    }
+
+    const totalSeconds = Math.max(1, Math.round(lastBetHours * 60 * 60));
+    if (totalSeconds < 60) {
+      return `${totalSeconds} sec ago`;
+    }
+    const totalMinutes = Math.round(totalSeconds / 60);
+    if (totalMinutes < 60) {
+      return `${totalMinutes} min ago`;
+    }
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (minutes === 0) {
+      return `${hours}h ago`;
+    }
+    return `${hours}h ${minutes}m ago`;
+  }
+
+  function getReportPriorityClass(lastBetHours, fallbackText = "") {
+    if (typeof lastBetHours !== "number" || Number.isNaN(lastBetHours) || lastBetHours < 0) {
+      const rawText = String(fallbackText || "").trim();
+      if (!rawText || rawText === "-" || rawText === "—") {
+        return "priority-fresh";
+      }
+      if (/^<\s*1\s*min\s*ago$/i.test(rawText)) {
+        return "priority-fresh";
+      }
+      return "";
+    }
+    if (lastBetHours >= 3) {
+      return "priority-3h";
+    }
+    if (lastBetHours >= 2) {
+      return "priority-2h";
+    }
+    return "priority-fresh";
+  }
+
+  function getQueueClientThemeClass(clientName = "") {
+    const normalized = String(clientName || "").trim().toLowerCase();
+    const map = {
+      "mac88": "client-theme-mac88",
+      "iconic21": "client-theme-iconic21",
+      "digitain": "client-theme-digitain",
+      "enjoy gaming": "client-theme-enjoy-gaming",
+      "amazing gaming": "client-theme-amazing-gaming",
+      "ballys": "client-theme-ballys",
+      "mgasia": "client-theme-mgasia",
+      "royal gaming": "client-theme-royal-gaming",
+      "stakelogic": "client-theme-stakelogic",
+      "onetouch": "client-theme-onetouch",
+      "one touch": "client-theme-onetouch",
+      "animo": "client-theme-animo",
+      "live vegas": "client-theme-live-vegas",
     };
-    return colors[key] || ["rgba(17,24,39,.08)", t().ink];
+    return map[normalized] || "client-theme-default";
   }
 
-  function t() {
-    return theme();
+  function getQueueClientExtraClass(clientName = "") {
+    return String(clientName || "").trim().toLowerCase() === "enjoy gaming" ? "two-line" : "";
   }
 
-  function ageColor(hours) {
-    if (typeof hours !== "number") {
-      return ["transparent", t().inkSoft];
+  function getQueueClientLabelHtml(clientName = "") {
+    const raw = String(clientName || "Client").trim() || "Client";
+    if (raw.toLowerCase() === "enjoy gaming") {
+      return "Enjoy<br>Gaming";
     }
-    if (hours > 3) {
-      return ["rgba(214,75,109,.16)", lightMode ? "#a3294a" : "#ffd9e2"];
-    }
-    return ["rgba(213,139,29,.18)", lightMode ? "#9a5d00" : "#f2c46d"];
+    return escapeHtml(raw);
   }
 
+  function renderQueueClientPill(clientName = "") {
+    const extraClass = ["queue-client-pill", getQueueClientThemeClass(clientName), getQueueClientExtraClass(clientName)]
+      .filter(Boolean)
+      .join(" ");
+    return `<div class="${extraClass}">${getQueueClientLabelHtml(clientName)}</div>`;
+  }
+
+  function closePanel() {
+    window[CLOSED_FLAG] = true;
+    window.clearInterval(heartbeat);
+    window.clearTimeout(window[TIMER_FLAG]);
+    window[TIMER_FLAG] = null;
+    window.clearTimeout(window[WINNER_TIMER_FLAG]);
+    window[WINNER_TIMER_FLAG] = null;
+    host.remove();
+  }
+
+  function render(payload, extra = {}) {
+    if (!payload) {
+      payload = mergePayload();
+    }
+    currentPayload = payload;
+    notifyRequests(payload);
+
+    const pendingPlayers = (payload?.reportQueue || []).length;
+
+    if (minimized) {
+      shadow.innerHTML = `<style>${DASHBOARD_CSS}</style>
+        <div class="bm-mini" id="bm-mini">
+          BO Checklist<span class="bm-version">${escapeHtml(VERSION)}</span>
+          <span class="bm-mini-note">Pending players:</span><b>${escapeHtml(pendingPlayers)}</b>
+          <span class="bm-mini-note">Click to open</span>
+        </div>`;
+      shadow.getElementById("bm-mini").addEventListener("click", () => {
+        minimized = false;
+        render(currentPayload);
+      });
+      return;
+    }
+
+    const visibleData = applyNightOnlyFilter(payload || { clients: [], warnings: [] });
+    const clients = [...(visibleData.clients || [])].sort((a, b) => b.total - a.total || a.client.localeCompare(b.client));
+    const activeClients = clients.filter((client) => client.total > 0);
+    const idleClients = clients.filter((client) => client.total === 0);
+    const hotspots = summariseHotspots(activeClients);
+    const largest = activeClients[0] || null;
+    const totalUnchecked = clients.reduce((sum, client) => sum + client.total, 0);
+    const winnerLeft = clients.reduce((sum, client) => sum + (Number(client.winnerReports) || 0), 0);
+    const reportQueue = [...(visibleData.reportQueue || [])];
+    const winnerQueue = reportQueue.filter((item) => item.reportType === "winner");
+    const quickQueue = reportQueue.filter((item) => item.reportType === "quick");
+    const completedQueue = [...(visibleData.completedQueue || [])];
+    const visibleCompletedQueue = completedReportsExpanded
+      ? completedQueue
+      : completedQueue.slice(0, COMPLETED_REPORTS_COLLAPSED_LIMIT);
+    const mailingClients = [...(visibleData.mailing || [])]
+      .map((row) => ({ ...row, total: (row.tabs || []).reduce((sum, tab) => sum + (Number(tab.count) || 0), 0) }))
+      .filter((row) => row.total > 0)
+      .sort((a, b) => b.total - a.total || String(a.client || "").localeCompare(String(b.client || "")));
+    const mailingTotal = mailingClients.reduce((sum, row) => sum + row.total, 0);
+    const requestsTotal = Number.isSafeInteger(payload?.ticketing?.requests) ? payload.ticketing.requests : null;
+    const requestsLabel = requestsTotal === null ? "Unknown - waiting for Ticketing badge" : String(requestsTotal);
+    const snapshotLabel = selectedDateIso || "";
+    const maxTotal = Math.max(...clients.map((client) => client.total), 1);
+
+    const lastUpdatedText = isScanningStatus
+      ? statusProgress.currentClient
+        ? `Overview ${statusProgress.processedClients}/${statusProgress.totalClients || "?"}: ${statusProgress.currentClient}`
+        : `Loading clients ${statusProgress.processedClients}/${statusProgress.totalClients || "?"}`
+      : formatLastUpdated(payload?.snapshotDate);
+    const winnerChipText = isScanningWinner
+      ? winnerProgress.currentClient
+        ? `Winner ${winnerProgress.processedClients}/${winnerProgress.totalClients || "?"}: ${winnerProgress.currentClient}`
+        : "Winner refresh in progress"
+      : payload?.winnerReportsSnapshotDate
+        ? `Winner refresh ${formatLastUpdated(payload.winnerReportsSnapshotDate).replace("Last update ", "")}`
+        : "Winner reports not loaded yet";
+    const winnerNextText = isScanningWinner ? "Winner auto-check paused during refresh" : formatWinnerNextCheckText();
+
+    const warnings = (visibleData.warnings || []).map((item) => `<div class="warning-box">${escapeHtml(item)}</div>`).join("");
+
+    let heroLeadTitle = "All clear";
+    let heroLeadText = "Quiet snapshot right now.";
+    if (largest && largest.total > 0) {
+      heroLeadTitle = largest.client;
+      if (activeClients.length === 1) {
+        heroLeadText = "Only one client needs attention right now.";
+      } else if (largest.total === 1) {
+        heroLeadText = `${activeClients.length} clients need attention, but the pressure is still light.`;
+      } else {
+        heroLeadText = `${largest.total} unchecked item${largest.total === 1 ? "" : "s"} currently lead the backlog.`;
+      }
+    }
+
+    shadow.innerHTML = `<style>${DASHBOARD_CSS}</style>
+      <div class="bm-topbar">
+        <div>BO Checklist <span class="bm-version">${escapeHtml(VERSION)}</span>${extra.progressLine ? ` <span style="opacity:.75;font-weight:600;">${escapeHtml(extra.progressLine)}</span>` : ""}</div>
+        <div class="bm-topbar-actions">
+          <button type="button" id="bm-minimize">Minimize</button>
+          <button type="button" id="bm-close">Close</button>
+        </div>
+      </div>
+      <div class="app">
+        <section class="hero">
+          <div class="hero-top">
+            <div class="pill" style="background:rgba(255,255,255,0.16); color:#fff; border:1px solid rgba(255,255,255,0.18);">Worker session active</div>
+            <div class="status-badge">BO Checklist ${escapeHtml(VERSION)}</div>
+          </div>
+
+          <div class="hero-main">
+            <div class="hero-copy">
+              <h2>One screen. All unchecked.</h2>
+              <p>
+                This dashboard runs on your logged-in BO tab, then pulls today's unchecked tab badges automatically and keeps the whole review picture on one screen.
+              </p>
+            </div>
+            <div class="hero-side">
+              <div class="hero-stat">
+                <strong>${escapeHtml(totalUnchecked)}</strong>
+                <span>Total unchecked cases across all visible clients.</span>
+              </div>
+              <div class="hero-stat">
+                <strong>${escapeHtml(heroLeadTitle)}</strong>
+                <span>${escapeHtml(heroLeadText)}</span>
+              </div>
+              <div class="hero-stat" role="status">
+                <strong>Requests: ${escapeHtml(requestsLabel)}</strong>
+                <span>Ticketing · updates approximately every 5 minutes</span>
+                <button class="ghost-button" type="button" id="requests-notifications" style="margin-top:6px;padding:5px 9px;font-size:11px;align-self:flex-start;">${requestNotificationsEnabled && "Notification" in window && Notification.permission === "granted" ? "Disable request notifications" : "Enable request notifications"}</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <div class="hero-bottom">
+              <div class="chip">${escapeHtml(activeClients.length)} clients need review</div>
+              <div class="chip">${escapeHtml(idleClients.length)} clients are clear</div>
+              <div class="chip" id="last-update-chip">${escapeHtml(lastUpdatedText)}</div>
+              <div class="chip" id="winner-update-chip">${escapeHtml(winnerChipText)}</div>
+              <div class="chip" id="winner-next-chip">${escapeHtml(winnerNextText)}</div>
+            </div>
+            <div class="toolbar-right">
+              <div class="date-controls">
+                <input class="date-input" id="date-filter" type="date" value="${escapeHtml(selectedDateIso)}">
+                <div class="quick-date-actions">
+                  <button class="ghost-button" id="today-button" type="button">Today</button>
+                  <button class="ghost-button" id="yesterday-button" type="button">Yesterday</button>
+                  <button class="secondary" id="apply-date-button" type="button">Apply date</button>
+                  <button class="ghost-button" id="night-toggle-button" type="button">${ignoreNightOnly ? "Include night tabs" : "Hide night tabs"}</button>
+                </div>
+              </div>
+              <div class="actions" style="margin:0;">
+                <button class="primary" id="refresh-button" type="button" ${isScanningStatus ? "disabled" : ""}>${isScanningStatus ? "Loading..." : "Refresh now"}</button>
+                <button class="ghost-button" id="winner-refresh-button" type="button" ${isScanningWinner ? "disabled" : ""}>${isScanningWinner ? "Loading winner..." : "Refresh winner reports"}</button>
+              </div>
+            </div>
+          </div>
+
+          ${warnings}
+        </section>
+
+        <section class="summary-grid">
+          <article class="summary-card">
+            <div class="label">Unchecked total</div>
+            <div class="value">${escapeHtml(totalUnchecked)}</div>
+            <div class="subvalue">All visible BO badge counts combined for the current worker session.</div>
+          </article>
+          <article class="summary-card">
+            <div class="label">Most loaded client</div>
+            <div class="value">${escapeHtml(largest ? largest.total : 0)}</div>
+            <div class="subvalue">${escapeHtml(largest && largest.total > 0 ? `${largest.client} currently has the biggest unchecked queue.` : "No active backlog right now.")}</div>
+          </article>
+          <article class="summary-card">
+            <div class="label">Clients with work</div>
+            <div class="value">${escapeHtml(activeClients.length)}</div>
+            <div class="subvalue">${escapeHtml(activeClients.map((client) => client.client).join(", ") || "No active clients")}</div>
+          </article>
+        </section>
+
+        <section class="client-section">
+          ${clients.map((client) => {
+            const intensity = client.total / maxTotal;
+            const quickReportsLeft = Number.isInteger(client.quickReports) ? client.quickReports : null;
+            const winnerReportsLeftOnly = Number.isInteger(client.winnerReports) ? client.winnerReports : null;
+            const showQuickReports = clientSupportsQuick(client.client);
+            const quickReportsDisplay = quickReportsLeft == null ? "-" : escapeHtml(quickReportsLeft);
+            const style = client.total > 0
+              ? `style="background:
+                linear-gradient(180deg, rgba(255,255,255,0.97), rgba(255,255,255,0.85)),
+                linear-gradient(135deg, rgba(214,75,109,${0.06 + intensity * 0.12}), rgba(106,70,242,${0.05 + intensity * 0.12}));"`
+              : "";
+            return `
+              <article class="client-card ${Number(client.total || 0) === 0 ? "zero" : ""} ${getQueueClientThemeClass(client.client)}" ${style}>
+                <div class="client-head">
+                  <div>
+                    <div class="label">Client</div>
+                    <div class="client-name">${escapeHtml(client.client)}</div>
+                  </div>
+                  <div class="client-head-actions">
+                    <button
+                      class="client-refresh-button"
+                      type="button"
+                      data-client-refresh="${escapeHtml(client.clientId)}"
+                      title="Refresh only ${escapeHtml(client.client)}"
+                      ${refreshingClientIds.has(String(client.clientId)) ? "disabled" : ""}
+                    >${refreshingClientIds.has(String(client.clientId)) ? "..." : "&#8635;"}</button>
+                    ${showQuickReports ? `<div class="quick-badge" title="Quick reports left">
+                      <span class="badge-prefix">Q</span>
+                      <span>${quickReportsDisplay}</span>
+                    </div>` : ""}
+                    <div class="winner-badge" title="Winner reports left">
+                      <span class="badge-prefix">W</span>
+                      <span>${winnerReportsLeftOnly == null ? "-" : escapeHtml(winnerReportsLeftOnly)}</span>
+                    </div>
+                    <div class="client-total">${escapeHtml(client.total)}</div>
+                  </div>
+                </div>
+
+                <div class="client-meta-bar">
+                  <div class="mini-chip">Open tabs ${escapeHtml(client.nonZero.length)}</div>
+                  ${showQuickReports ? `<div class="mini-chip mini-chip-quick" data-quick-left="1">Quick left ${quickReportsDisplay}</div>` : ""}
+                  <div class="mini-chip" data-winner-done="1">Winner done ${client.winnerReportsCompleted == null ? "-" : escapeHtml(client.winnerReportsCompleted)}</div>
+                  <div class="mini-chip" data-reports-total="1">Reports total ${client.winnerReportsTotal == null ? "-" : escapeHtml(client.winnerReportsTotal)}</div>
+                </div>
+
+                <div class="tab-list">
+                  ${client.nonZero.length
+                    ? client.nonZero
+                        .slice()
+                        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+                        .map((item) => `
+                          <div class="tab-row">
+                            <div class="tab-label">${escapeHtml(item.label)}</div>
+                            <div class="tab-count">${escapeHtml(item.count)}</div>
+                          </div>
+                        `)
+                        .join("")
+                    : `<div class="clear-state">No unchecked items for this client in the latest BO refresh.</div>`}
+                </div>
+              </article>
+            `;
+          }).join("")}
+        </section>
+
+        <section class="queue-grid">
+          <article class="panel winner-panel">
+            <div class="panel-head"><h3>Winner report queue <span class="panel-count">${winnerQueue.length}</span></h3></div>
+            <div class="list">
+              ${winnerQueue.slice(0, 12).map((item) => `
+                <div class="list-item">
+                  ${renderQueueClientPill(item.client || "Client")}
+                  <div class="list-item-body">
+                    <div class="list-item-title">${escapeHtml(item.playerId || "Unknown player")}</div>
+                    ${(item.netWinningsText || item.aggregatedText) ? `
+                      <div class="queue-extra">
+                        ${item.netWinningsText ? `<div class="queue-extra-chip">Today win ${escapeHtml(item.netWinningsText)}</div>` : ""}
+                        ${item.aggregatedText ? `<div class="queue-extra-chip">Agg ${escapeHtml(item.aggregatedText)}</div>` : ""}
+                      </div>
+                    ` : ""}
+                  </div>
+                  <div class="list-item-count ${escapeHtml(getReportPriorityClass(item.lastBetHours, item.lastBetText || "-"))}">${escapeHtml(formatReportAge(item.lastBetHours, item.lastBetText || "-"))}</div>
+                </div>
+              `).join("") || `<div class="list-item"><div class="hero-copy"><div class="list-item-title">No winner report candidates</div><div class="list-item-meta">Winner queue will appear here after the BO winner refresh finishes.</div></div><div class="list-item-count">0</div></div>`}
+            </div>
+          </article>
+
+          <article class="panel quick-panel">
+            <div class="panel-head"><h3>Quick report queue <span class="panel-count">${quickQueue.length}</span></h3></div>
+            <div class="list">
+              ${quickQueue.slice(0, 12).map((item) => `
+                <div class="list-item">
+                  ${renderQueueClientPill(item.client || "Client")}
+                  <div class="list-item-body">
+                    <div class="list-item-title">${escapeHtml(item.playerId || "Unknown player")}</div>
+                    ${(item.netWinningsText || item.aggregatedText) ? `
+                      <div class="queue-extra">
+                        ${item.netWinningsText ? `<div class="queue-extra-chip">Today win ${escapeHtml(item.netWinningsText)}</div>` : ""}
+                        ${item.aggregatedText ? `<div class="queue-extra-chip">Agg ${escapeHtml(item.aggregatedText)}</div>` : ""}
+                      </div>
+                    ` : ""}
+                  </div>
+                  <div class="list-item-count ${escapeHtml(getReportPriorityClass(item.lastBetHours, item.lastBetText || "-"))}">${escapeHtml(formatReportAge(item.lastBetHours, item.lastBetText || "-"))}</div>
+                </div>
+              `).join("") || `<div class="list-item"><div class="hero-copy"><div class="list-item-title">No quick report candidates</div><div class="list-item-meta">Quick queue is empty in the latest BO snapshot.</div></div><div class="list-item-count">0</div></div>`}
+            </div>
+          </article>
+
+          <article class="panel completed-panel done-panel">
+            <div class="panel-head"><h3>Completed reports <span class="panel-count panel-count-completed">${completedQueue.length}</span></h3></div>
+            <div class="list">
+              ${visibleCompletedQueue.map((item) => `
+                <div class="list-item completed">
+                  ${renderQueueClientPill(item.client || "Client")}
+                  <div class="list-item-body">
+                    <div class="list-item-title">${escapeHtml(item.playerId || "Unknown player")}</div>
+                    ${(item.netWinningsText || item.aggregatedText) ? `
+                      <div class="queue-extra">
+                        ${item.netWinningsText ? `<div class="queue-extra-chip">Today win ${escapeHtml(item.netWinningsText)}</div>` : ""}
+                        ${item.aggregatedText ? `<div class="queue-extra-chip">Agg ${escapeHtml(item.aggregatedText)}</div>` : ""}
+                      </div>
+                    ` : ""}
+                  </div>
+                  <div class="list-item-count">&#10003;</div>
+                </div>
+              `).join("") || `<div class="list-item"><div class="hero-copy"><div class="list-item-title">No completed reports yet</div><div class="list-item-meta">Completed winner reports will appear here once generated.</div></div><div class="list-item-count">0</div></div>`}
+            </div>
+            ${completedQueue.length > COMPLETED_REPORTS_COLLAPSED_LIMIT ? `
+              <div style="margin-top:14px; display:flex; justify-content:center;">
+                <button class="secondary" id="completed-reports-toggle" type="button">
+                  ${completedReportsExpanded ? "Show less" : `View more (${completedQueue.length - COMPLETED_REPORTS_COLLAPSED_LIMIT})`}
+                </button>
+              </div>
+            ` : ""}
+          </article>
+        </section>
+
+        <section class="panel-grid">
+          <article class="panel mailing-panel">
+            <div class="panel-head">
+              <h3>Mailing check <span class="panel-count">${escapeHtml(mailingTotal)}</span></h3>
+              <div class="panel-head-actions">
+                <button class="panel-refresh-button" id="mailing-refresh-button" type="button" ${isScanningWinner ? "disabled" : ""}>
+                  ${isScanningWinner ? "Loading..." : "Refresh"}
+                </button>
+              </div>
+            </div>
+            <div class="list">
+              ${mailingClients.slice(0, 8).map((client) => {
+                const tabs = (client.tabs || []).filter((tab) => (Number(tab.count) || 0) > 0);
+                return `
+                  <div class="list-item mailing-item">
+                    ${renderQueueClientPill(client.client || "Client")}
+                    <div class="list-item-body">
+                      <div class="list-item-title">${escapeHtml(client.client || "Client")}</div>
+                      <div class="queue-extra">
+                        ${tabs.map((tab) => `<div class="queue-extra-chip">${escapeHtml(tab.label)} ${escapeHtml(tab.count)}</div>`).join("")}
+                      </div>
+                    </div>
+                    <div class="list-item-count">${escapeHtml(client.total)}</div>
+                  </div>
+                `;
+              }).join("") || `<div class="list-item"><div class="hero-copy"><div class="list-item-title">Mailing tabs are clear</div><div class="list-item-meta">No pending mailing badge counts in BO.</div></div><div class="list-item-count">0</div></div>`}
+              ${mailingClients.length > 8 ? `<div class="list-item"><div class="hero-copy"><div class="list-item-title">More clients</div><div class="list-item-meta">${escapeHtml(mailingClients.length - 8)} more with mailing badges.</div></div><div class="list-item-count">+</div></div>` : ""}
+            </div>
+          </article>
+
+          <article class="panel">
+            <h3>Backlog ranking</h3>
+            <div class="list">
+              ${activeClients.slice(0, 6).map((client, index) => `
+                <div class="list-item">
+                  <div class="index-badge">${index + 1}</div>
+                  <div class="hero-copy">
+                    <div class="list-item-title">${escapeHtml(client.client)}</div>
+                    <div class="list-item-meta">${escapeHtml(client.nonZero.map((item) => `${item.label} ${item.count}`).join(" | "))}</div>
+                  </div>
+                  <div class="list-item-count">${escapeHtml(client.total)}</div>
+                </div>
+              `).join("") || `<div class="list-item"><div class="hero-copy"><div class="list-item-title">Nothing unchecked</div><div class="list-item-meta">All visible clients are currently clear.</div></div><div class="list-item-count">0</div></div>`}
+            </div>
+          </article>
+
+          <article class="panel">
+            <h3>Biggest hotspots</h3>
+            <div class="list">
+              ${hotspots.map((item) => `
+                <div class="list-item hotspot">
+                  <div class="hero-copy">
+                    <div class="list-item-title">${escapeHtml(item.label)}</div>
+                    <div class="list-item-meta">${escapeHtml(item.clients.join(", "))}</div>
+                  </div>
+                  <div class="list-item-count">${escapeHtml(item.count)}</div>
+                </div>
+              `).join("") || `<div class="list-item hotspot"><div class="hero-copy"><div class="list-item-title">No hotspots</div><div class="list-item-meta">No active checklist pressure in the current BO snapshot.</div></div><div class="list-item-count">0</div></div>`}
+            </div>
+          </article>
+        </section>
+
+        <section class="footer-note">
+          Source: <strong>lfscbo.com/#lfs/toCheck/index</strong>.
+          Auto-refresh interval: <strong>${Math.round(REFRESH_MS / 60000)} minutes</strong>.
+          Winner reports refresh: <strong>${Math.round(WINNER_REFRESH_MS / 60000)} minutes</strong>.
+          This overview uses your logged-in BO session; no data leaves the browser.
+        </section>
+      </div>
+    `;
+
+    shadow.getElementById("bm-minimize")?.addEventListener("click", () => {
+      minimized = true;
+      render(currentPayload);
+    });
+    shadow.getElementById("bm-close")?.addEventListener("click", closePanel);
+    shadow.getElementById("refresh-button")?.addEventListener("click", () => runOverviewScan());
+    shadow.getElementById("winner-refresh-button")?.addEventListener("click", () => runWinnerScan());
+    shadow.getElementById("mailing-refresh-button")?.addEventListener("click", () => runWinnerScan());
+    shadow.getElementById("apply-date-button")?.addEventListener("click", () => {
+      selectedDateIso = shadow.getElementById("date-filter")?.value || selectedDateIso;
+      runOverviewScan();
+      runWinnerScan();
+    });
+    shadow.getElementById("today-button")?.addEventListener("click", () => {
+      selectedDateIso = getIsoDate();
+      runOverviewScan();
+      runWinnerScan();
+    });
+    shadow.getElementById("yesterday-button")?.addEventListener("click", () => {
+      const date = new Date();
+      date.setDate(date.getDate() - 1);
+      selectedDateIso = getIsoDate(date);
+      runOverviewScan();
+      runWinnerScan();
+    });
+    shadow.getElementById("night-toggle-button")?.addEventListener("click", () => {
+      ignoreNightOnly = !ignoreNightOnly;
+      localStorage.setItem(NIGHT_FILTER_STORAGE_KEY, ignoreNightOnly ? "1" : "0");
+      render(currentPayload);
+    });
+    shadow.getElementById("completed-reports-toggle")?.addEventListener("click", () => {
+      completedReportsExpanded = !completedReportsExpanded;
+      render(currentPayload);
+    });
+    shadow.getElementById("requests-notifications")?.addEventListener("click", async () => {
+      if (!("Notification" in window)) {
+        alert("Notifications are not supported in this browser.");
+        return;
+      }
+      if (requestNotificationsEnabled && Notification.permission === "granted") {
+        requestNotificationsEnabled = false;
+      } else {
+        try {
+          requestNotificationsEnabled = (await Notification.requestPermission()) === "granted";
+        } catch {
+          requestNotificationsEnabled = false;
+        }
+      }
+      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, requestNotificationsEnabled ? "1" : "0");
+      render(currentPayload);
+    });
+    shadow.querySelectorAll("[data-client-refresh]").forEach((button) => {
+      button.addEventListener("click", () => refreshSingleClient(button.dataset.clientRefresh));
+    });
+  }
+
+  // Live countdown for the "next winner check" chip.
+  window.setInterval(() => {
+    if (window[CLOSED_FLAG] || minimized) {
+      return;
+    }
+    const chip = shadow.getElementById("winner-next-chip");
+    if (chip && !isScanningWinner) {
+      chip.textContent = formatWinnerNextCheckText();
+    }
+  }, 1000);
+
+  async function refreshSingleClient(clientId) {
+    const id = String(clientId);
+    if (refreshingClientIds.has(id)) {
+      return;
+    }
+    if (!userConsented && !ensureConsent()) {
+      return;
+    }
+    refreshingClientIds.add(id);
+    render(currentPayload);
+
+    return withBoLock(async () => {
+      try {
+        const isoDate = selectedDateIso;
+        const displayDate = getDisplayDateFromIso(isoDate);
+        const known = overviewResults.find((client) => String(client.clientId) === id);
+        if (!known) {
+          return;
+        }
+        const clientRef = { id, client: known.client };
+
+        await boFetch(`/ajax.php?q=core/userTeamSelect&type=lfs&val=${encodeURIComponent(id)}`);
+        await sleep(400);
+        const toCheckHtml = await fetchToCheckHtmlWithLateTabs(isoDate, clientRef.client);
+        const fresh = collectClient(clientRef, toCheckHtml);
+        overviewResults = overviewResults.map((client) => (String(client.clientId) === id ? fresh : client));
+        overviewSnapshotAt = new Date().toISOString();
+
+        try {
+          const winnerOverview = await collectWinnerForClient(clientRef, isoDate, displayDate);
+          winnerClients = { ...winnerClients, [id]: { ...winnerOverview.winnerCounts } };
+          winnerReportQueue = [...winnerReportQueue.filter((item) => String(item.clientId) !== id), ...winnerOverview.reportQueueItems].sort(
+            (a, b) => (b.lastBetHours ?? -1) - (a.lastBetHours ?? -1),
+          );
+          winnerCompletedQueue = [...winnerCompletedQueue.filter((item) => String(item.clientId) !== id), ...winnerOverview.completedQueueItems];
+          winnerSnapshotAt = new Date().toISOString();
+        } catch (error) {
+          warningsBatch = [...new Set([...warningsBatch, `${clientRef.client}: ${error.message}`])];
+        }
+
+        let mailing = [];
+        try {
+          const mailerHtml = await boFetch("/ajax.php?q=lfs/ticketing/mailer");
+          mailing = parseMailerTabsFromHtml(mailerHtml).filter((tab) => tab.count > 0);
+        } catch {
+          mailing = [];
+        }
+        winnerMailingRows = [
+          ...winnerMailingRows.filter((row) => String(row.clientId) !== id),
+          ...(mailing.length ? [{ client: clientRef.client, clientId: id, tabs: mailing }] : []),
+        ];
+
+        restoreOriginalClient();
+        render(mergePayload());
+      } finally {
+        refreshingClientIds.delete(id);
+        render(currentPayload);
+      }
+    });
+  }
   function restoreOriginalClient() {
     if (!originalClientId) {
       return;
@@ -1410,10 +1575,14 @@
     return withBoLock(async () => {
       isScanningStatus = true;
       statusLine = "Statuses: scanning...";
+      statusProgress.inProgress = true;
+      statusProgress.processedClients = 0;
+      statusProgress.totalClients = 0;
+      statusProgress.currentClient = null;
       render(mergePayload());
 
       try {
-        const isoDate = getIsoDate();
+        const isoDate = selectedDateIso;
         const baseHtml = await fetchToCheckHtml(isoDate);
 
         if (isLoginPage(baseHtml)) {
@@ -1458,6 +1627,9 @@
         const results = [];
         for (let index = 0; index < clients.length; index += 1) {
           const clientRef = clients[index];
+          statusProgress.totalClients = clients.length;
+          statusProgress.processedClients = index;
+          statusProgress.currentClient = clientRef.client;
           statusLine = `Statuses ${index + 1} / ${clients.length}`;
           render(mergePayload(), { progressLine: `${statusLine} — ${clientRef.client}` });
 
@@ -1482,6 +1654,9 @@
         render(mergePayload());
       } finally {
         isScanningStatus = false;
+        statusProgress.inProgress = false;
+        statusProgress.processedClients = statusProgress.totalClients || statusProgress.processedClients;
+        statusProgress.currentClient = null;
         render(mergePayload());
 
         window.clearTimeout(window[TIMER_FLAG]);
@@ -1515,6 +1690,10 @@
     return withBoLock(async () => {
       isScanningWinner = true;
       statusLine = "Winner reports: scanning...";
+      winnerProgress.inProgress = true;
+      winnerProgress.processedClients = 0;
+      winnerProgress.totalClients = 0;
+      winnerProgress.currentClient = null;
       render(mergePayload());
 
       const nextWinnerClients = {};
@@ -1523,7 +1702,7 @@
       const nextMailingRows = [];
 
       try {
-        const isoDate = getIsoDate();
+        const isoDate = selectedDateIso;
         const displayDate = getDisplayDateFromIso(isoDate);
 
         let clientRefs = overviewResults.map((client) => ({ id: client.clientId, client: client.client }));
@@ -1537,6 +1716,9 @@
 
         for (let index = 0; index < clientRefs.length; index += 1) {
           const clientRef = clientRefs[index];
+          winnerProgress.totalClients = clientRefs.length;
+          winnerProgress.processedClients = index;
+          winnerProgress.currentClient = clientRef.client;
           statusLine = `Winner reports ${index + 1} / ${clientRefs.length}`;
           render(mergePayload(), { progressLine: `${statusLine} — ${clientRef.client}` });
 
@@ -1597,6 +1779,9 @@
         render(mergePayload());
       } finally {
         isScanningWinner = false;
+        winnerProgress.inProgress = false;
+        winnerProgress.processedClients = winnerProgress.totalClients || winnerProgress.processedClients;
+        winnerProgress.currentClient = null;
         render(mergePayload());
 
         window.clearTimeout(window[WINNER_TIMER_FLAG]);
@@ -1605,7 +1790,7 @@
     });
   }
 
-  root.dataset.minimized = "0";
+
   render(mergePayload());
   runOverviewScan();
   runWinnerScan();
