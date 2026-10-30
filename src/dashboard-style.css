@@ -1787,3 +1787,11 @@
 }
 .bm-topbar button:disabled { opacity: .5; cursor: default; }
 .bm-version { color: #7CE3C3; font-size: 11px; margin-left: 6px; }
+
+/* ---- density overrides (bookmarklet) ---- */
+.app { zoom: .82; gap: 12px; }
+.hero-copy p { display: none; }
+.hero-stat span { display: none; }
+.hero-stat { padding: 5px 8px; }
+.summary-card .subvalue { display: none; }
+.footer-note { font-size: 11px; }
