@@ -1182,13 +1182,6 @@
                   </div>
                 </div>
 
-                <div class="client-meta-bar">
-                  <div class="mini-chip">Open tabs ${escapeHtml(client.nonZero.length)}</div>
-                  ${showQuickReports ? `<div class="mini-chip mini-chip-quick" data-quick-left="1">Quick left ${quickReportsDisplay}</div>` : ""}
-                  <div class="mini-chip" data-winner-done="1">Winner done ${client.winnerReportsCompleted == null ? "-" : escapeHtml(client.winnerReportsCompleted)}</div>
-                  <div class="mini-chip" data-reports-total="1">Reports total ${client.winnerReportsTotal == null ? "-" : escapeHtml(client.winnerReportsTotal)}</div>
-                </div>
-
                 <div class="tab-list">
                   ${client.nonZero.length
                     ? client.nonZero
