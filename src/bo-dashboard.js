@@ -1030,7 +1030,8 @@
     const pendingPlayers = (payload?.reportQueue || []).length;
 
     if (minimized) {
-      const uncheckedTotal = (payload?.clients || []).reduce((sum, client) => sum + (Number(client.total) || 0), 0);
+      const miniClients = applyNightOnlyFilter(payload || { clients: [] }).clients || [];
+      const uncheckedTotal = miniClients.reduce((sum, client) => sum + (Number(client.total) || 0), 0);
       const pendingLabel = payload?.winnerReportsSnapshotDate ? String(pendingPlayers) : "…";
       shadow.innerHTML = `<style>${DASHBOARD_CSS}</style>
         <div class="bm-mini" id="bm-mini">
