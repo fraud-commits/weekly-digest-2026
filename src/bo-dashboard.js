@@ -25,6 +25,7 @@
   const NIGHT_ONLY_TYPES = new Set(["robotPlayers", "dealerPlayerMargin"]);
   const NIGHT_FILTER_STORAGE_KEY = "bo-checklist-ignore-night-only-v1";
   const NOTIFICATIONS_STORAGE_KEY = "bo-request-notifications";
+  const THEME_STORAGE_KEY = "bo-checklist-theme-v1";
   const COMPLETED_REPORTS_COLLAPSED_LIMIT = 5;
   const WINNER_WAIT_MS = 2000;
   const WINNER_CONFIRM_WAIT_MS = 1000;
@@ -76,18 +77,21 @@
   let requestNotificationsEnabled = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY) === "1";
   let lastRequestsTotal = null;
   let minimized = false;
+  let darkMode = localStorage.getItem(THEME_STORAGE_KEY) === "dark";
   const statusProgress = { inProgress: false, processedClients: 0, totalClients: 0, currentClient: null, currentStage: null };
   const winnerProgress = { inProgress: false, processedClients: 0, totalClients: 0, currentClient: null, currentStage: null };
   const refreshingClientIds = new Set();
 
   const host = document.createElement("div");
   host.id = PANEL_ID;
+  const LIGHT_BG = "radial-gradient(circle at top left, rgba(10,163,108,.12), transparent 25%), radial-gradient(circle at top right, rgba(106,70,242,.16), transparent 28%), linear-gradient(180deg,#fbf7f0 0%, #f6f1e8 55%, #ece2cf 100%)";
+  const DARK_BG = "radial-gradient(circle at top left, rgba(10,163,108,.14), transparent 25%), radial-gradient(circle at top right, rgba(106,70,242,.12), transparent 28%), linear-gradient(180deg,#02120d 0%, #000E0B 60%, #000a08 100%)";
   host.style.cssText = [
     "position:fixed",
     "inset:0",
     "z-index:2147483000",
     "overflow:auto",
-    "background:radial-gradient(circle at top left, rgba(10,163,108,.12), transparent 25%), radial-gradient(circle at top right, rgba(106,70,242,.16), transparent 28%), linear-gradient(180deg,#fbf7f0 0%, #f6f1e8 55%, #ece2cf 100%)",
+    `background:${darkMode ? DARK_BG : LIGHT_BG}`,
     'font-family:"Segoe UI","Trebuchet MS",sans-serif',
     "color:#111827",
   ].join(";");
@@ -1091,10 +1095,13 @@
       }
     }
 
+    host.style.background = darkMode ? DARK_BG : LIGHT_BG;
     shadow.innerHTML = `<style>${DASHBOARD_CSS}</style>
+      <div class="bm-page" data-theme="${darkMode ? "dark" : "light"}">
       <div class="bm-topbar">
         <div>BO Checklist <span class="bm-version">${escapeHtml(VERSION)}</span>${extra.progressLine ? ` <span style="opacity:.75;font-weight:600;">${escapeHtml(extra.progressLine)}</span>` : ""}</div>
         <div class="bm-topbar-actions">
+          <button type="button" id="bm-theme">${darkMode ? "Light mode" : "Dark mode"}</button>
           <button type="button" id="bm-minimize">Minimize</button>
           <button type="button" id="bm-close">Close</button>
         </div>
@@ -1382,7 +1389,14 @@
           This overview uses your logged-in BO session; no data leaves the browser.
         </section>
       </div>
+      </div>
     `;
+
+    shadow.getElementById("bm-theme")?.addEventListener("click", () => {
+      darkMode = !darkMode;
+      localStorage.setItem(THEME_STORAGE_KEY, darkMode ? "dark" : "light");
+      render(currentPayload);
+    });
 
     shadow.getElementById("bm-minimize")?.addEventListener("click", () => {
       minimized = true;
