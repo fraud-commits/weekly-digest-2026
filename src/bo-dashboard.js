@@ -1119,24 +1119,6 @@
           <div class="hero-main">
             <div class="hero-copy">
               <h2>One screen. All unchecked.</h2>
-              <p>
-                This dashboard runs on your logged-in BO tab, then pulls today's unchecked tab badges automatically and keeps the whole review picture on one screen.
-              </p>
-            </div>
-            <div class="hero-side">
-              <div class="hero-stat">
-                <strong>${escapeHtml(totalUnchecked)}</strong>
-                <span>Total unchecked cases across all visible clients.</span>
-              </div>
-              <div class="hero-stat">
-                <strong>${escapeHtml(heroLeadTitle)}</strong>
-                <span>${escapeHtml(heroLeadText)}</span>
-              </div>
-              <div class="hero-stat" role="status">
-                <strong>Requests: ${escapeHtml(requestsLabel)}</strong>
-                <span>Ticketing · updates approximately every 5 minutes</span>
-                <button class="ghost-button" type="button" id="requests-notifications" style="margin-top:6px;padding:5px 9px;font-size:11px;align-self:flex-start;">${requestNotificationsEnabled && "Notification" in window && Notification.permission === "granted" ? "Disable request notifications" : "Enable request notifications"}</button>
-              </div>
             </div>
           </div>
 
@@ -1176,6 +1158,11 @@
             <div class="label">Clients with work</div>
             <div class="value">${escapeHtml(activeClients.length)}</div>
             <div class="subvalue">${escapeHtml(activeClients.map((client) => client.client).join(", ") || "No active clients")}</div>
+          </article>
+          <article class="summary-card">
+            <div class="label">Ticketing requests</div>
+            <div class="value">${escapeHtml(requestsLabel)}</div>
+            <div class="subvalue">Updates approximately every 5 minutes. <button type="button" id="requests-notifications" style="padding:3px 9px;font-size:10px;font-weight:700;background:#00987D;color:#fff;border:0;border-radius:8px;cursor:pointer;">${requestNotificationsEnabled && "Notification" in window && Notification.permission === "granted" ? "Disable notifications" : "Enable notifications"}</button></div>
           </article>
         </section>
 

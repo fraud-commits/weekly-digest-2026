@@ -1790,6 +1790,7 @@
 
 /* ---- density overrides (bookmarklet) ---- */
 .app { zoom: .82; gap: 12px; }
+.hero-main { grid-template-columns: 1fr; }
 .hero-copy p { display: none; }
 .hero-stat span { display: none; }
 .hero-stat { padding: 5px 8px; }
