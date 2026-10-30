@@ -1318,8 +1318,8 @@
       "iconic21": ["rgba(121,92,246,.14)", "#6d28d9"],
       "digitain": ["rgba(228,116,142,.14)", "#c2416c"],
       "enjoy gaming": ["rgba(41,185,121,.15)", "#15803d"],
-      "amazing gaming": ["rgba(245,158,11,.16)", "#b45309"],
-      "ballys": ["rgba(240,171,0,.16)", "#b45309"],
+      "amazing gaming": ["rgba(245,158,11,.16)", "#d97706"],
+      "ballys": ["rgba(251,191,36,.18)", "#fbbf24"],
       "mgasia": ["rgba(16,185,129,.16)", "#0f766e"],
       "royal gaming": ["rgba(99,102,241,.14)", "#4338ca"],
       "stakelogic": ["rgba(34,197,94,.14)", "#15803d"],
@@ -1421,6 +1421,29 @@
         const clients = parseClientsFromHtml(baseHtml);
         if (!clients.length) {
           throw new Error("Could not parse client list from BO");
+        }
+
+        // The BO dropdown can transiently lose some teams between refreshes.
+        // Keep scanning clients we already know about from the previous pass.
+        if (overviewResults.length) {
+          const seen = new Map(clients.map((client) => [client.id, client]));
+          const missing = [];
+          for (const previous of overviewResults) {
+            if (!seen.has(previous.clientId)) {
+              seen.set(previous.clientId, { id: previous.clientId, client: previous.client });
+              missing.push(previous.client);
+            }
+          }
+          if (missing.length) {
+            warningsBatch = [
+              ...new Set([
+                ...warningsBatch,
+                `Statuses: ${missing.join(", ")} missing from client list - scanning by last known id`,
+              ]),
+            ];
+          }
+          clients.length = 0;
+          clients.push(...seen.values());
         }
 
         originalClientId = clients.find((client) => client.selected)?.id || null;
