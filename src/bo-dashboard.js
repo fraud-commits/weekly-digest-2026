@@ -1104,6 +1104,13 @@
       <div class="bm-topbar">
         <div>BO Checklist <span class="bm-version">${escapeHtml(VERSION)}</span>${extra.progressLine ? ` <span style="opacity:.75;font-weight:600;">${escapeHtml(extra.progressLine)}</span>` : ""}</div>
         <div class="bm-topbar-actions">
+          <input type="date" id="date-filter" value="${escapeHtml(selectedDateIso)}">
+          <button type="button" id="today-button">Today</button>
+          <button type="button" id="yesterday-button">Yesterday</button>
+          <button type="button" id="apply-date-button">Apply date</button>
+          <button type="button" id="night-toggle-button">${ignoreNightOnly ? "Include night tabs" : "Hide night tabs"}</button>
+          <button type="button" id="refresh-button" class="bm-primary" ${isScanningStatus ? "disabled" : ""}>${isScanningStatus ? "Loading..." : "Refresh now"}</button>
+          <button type="button" id="winner-refresh-button" ${isScanningWinner ? "disabled" : ""}>${isScanningWinner ? "Loading winner..." : "Refresh winner reports"}</button>
           <button type="button" id="bm-theme">${darkMode ? "Light mode" : "Dark mode"}</button>
           <button type="button" id="bm-minimize">Minimize</button>
           <button type="button" id="bm-close">Close</button>
@@ -1119,24 +1126,6 @@
           <div class="hero-main">
             <div class="hero-copy">
               <h2>One screen. All unchecked.</h2>
-            </div>
-          </div>
-
-          <div class="toolbar">
-            <div class="toolbar-right" style="margin-left:auto;">
-              <div class="date-controls">
-                <input class="date-input" id="date-filter" type="date" value="${escapeHtml(selectedDateIso)}">
-                <div class="quick-date-actions">
-                  <button class="ghost-button" id="today-button" type="button">Today</button>
-                  <button class="ghost-button" id="yesterday-button" type="button">Yesterday</button>
-                  <button class="secondary" id="apply-date-button" type="button">Apply date</button>
-                  <button class="ghost-button" id="night-toggle-button" type="button">${ignoreNightOnly ? "Include night tabs" : "Hide night tabs"}</button>
-                </div>
-              </div>
-              <div class="actions" style="margin:0;">
-                <button class="primary" id="refresh-button" type="button" ${isScanningStatus ? "disabled" : ""}>${isScanningStatus ? "Loading..." : "Refresh now"}</button>
-                <button class="ghost-button" id="winner-refresh-button" type="button" ${isScanningWinner ? "disabled" : ""}>${isScanningWinner ? "Loading winner..." : "Refresh winner reports"}</button>
-              </div>
             </div>
           </div>
 

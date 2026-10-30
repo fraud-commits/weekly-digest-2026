@@ -1786,6 +1786,16 @@
   cursor: pointer;
 }
 .bm-topbar button:disabled { opacity: .5; cursor: default; }
+.bm-topbar input[type="date"] {
+  border: 1px solid rgba(239, 255, 251, .25);
+  background: rgba(239, 255, 251, .1);
+  color: #EFFFFB;
+  border-radius: 10px;
+  padding: 5px 10px;
+  font: 600 12px/1 "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+.bm-topbar .bm-primary { background: #00987D; border-color: #00987D; color: #fff; }
 .bm-version { color: #7CE3C3; font-size: 11px; margin-left: 6px; }
 
 /* ---- density overrides (bookmarklet) ---- */
